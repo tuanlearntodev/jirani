@@ -23,5 +23,13 @@ Jirani Offline Library Backend is a FastAPI-based system designed for managing a
 - **Tag Router:** Manages tag creation and retrieval.
 - **Video Router:** Manages video content lifecycle.
 
+### Container startup behavior
+- `docker/entrypoint.sh` creates `/app/uploads/books` and `/app/uploads/covers` on container start.
+
+### Docker publish workflow
+- Use `scripts/build-and-push.ps1` to publish multi-arch images for `linux/amd64` and `linux/arm64`.
+- ARM64 pushes require Docker Desktop plus buildx/QEMU binfmt support.
+- For local-only checks, run the script with `-Platforms linux/amd64 -Push:$false`.
+
 # ## Active Tasks
 *No active tasks currently.*
