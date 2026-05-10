@@ -4,7 +4,7 @@ from app.repositories.video_repo import Video_Repo
 from sqlalchemy.orm import Session, joinedload
 from app.models.video import Video
 from app.models.tag import Tag
-import os, shutil, uuid, asyncio
+import os, shutil, uuid, asyncio, mimetypes
 from fastapi.responses import StreamingResponse
 from app.database import get_db
 from pathlib import Path
@@ -118,6 +118,11 @@ def stream_video(video_id: int, db: Session = Depends(get_db)):
     video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    
+    mime_type, _ = mimetypes.guess_type(video.file_path)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+
     def iterfile():
         with open(video.file_path, "rb") as f:
             while True:
@@ -125,4 +130,5 @@ def stream_video(video_id: int, db: Session = Depends(get_db)):
                 if not chunk:
                     break
                 yield chunk
-    return StreamingResponse(iterfile(), media_type="video/mp4")
+
+    return StreamingResponse(iterfile(), media_type=mime_type)
