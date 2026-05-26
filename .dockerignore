@@ -6,5 +6,11 @@ __pycache__/
 
 # Project artifacts
 uploads/
-graphify-out/
 *.log
+
+# OpenCode / Superpowers
+.opencode/
+AGENTS.md
+docs/superpowers/
+.graphifyignore
+graphify-out/
