@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: jirani_postgres
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: unless-stopped
     environment:
       POSTGRES_DB: jirani_library
@@ -12,25 +13,26 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d jirani_library" ]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d jirani_library"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  api:
+  jirani:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: jirani_api
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+    ports:
+      - "8000:8000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/jirani_library
       DEBUG: "true"
-    ports:
-      - "8000:8000"
     volumes:
       - ./uploads:/app/uploads
 
