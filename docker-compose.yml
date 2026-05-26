@@ -21,7 +21,7 @@ services:
   jirani:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
     container_name: jirani_api
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: unless-stopped
