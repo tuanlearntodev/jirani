@@ -1,0 +1,207 @@
+# Auth System Redesign — Design Spec
+
+**Date:** 2026-06-02  
+**Project:** Jirani Offline Library Backend  
+**Scope:** Auth system only (content endpoints handled separately)
+
+---
+
+## Context
+
+The existing auth system has several problems that must be fixed before the project scales:
+
+- `POST /auth/seed-roles` and `POST /auth/make-admin/{username}` are completely unprotected — anyone on the network can call them
+- Self-registration (`POST /auth/signup`) gives users no role, leaving them in a broken state
+- Password recovery uses a weak 6-digit numeric OTP that is never invalidated after use
+- `POST /auth/change-password` incorrectly requires admin role — teachers and admins should be able to change their own password; students never change their own PIN
+- The models use SQLAlchemy 1.x `Column()` style and Pydantic v1 `class Config` style
+- Three tables (`accounts`, `roles`, `account_roles`) require two joins just to check a user's role
+
+The system serves children in low-internet, low-digital-literacy environments. The redesign must be simple for children to use while keeping the admin panel protected.
+
+---
+
+## Design Decisions
+
+### 1. Single Table: `accounts`
+
+The `roles` and `account_roles` tables are removed entirely. A single `role` enum column is added directly to `accounts`. Each user has exactly one role.
+
+**Rationale:** The role set is fixed and hierarchical (admin > teacher > student). No real use case requires a user to hold two roles simultaneously. Collapsing three tables into one eliminates all join overhead and simplifies every query.
+
+### 2. Role Enum
+
+```
+RoleEnum: admin | teacher | student
+```
+
+Enforced as a Python `enum.Enum` and stored as a native DB enum column. No CheckConstraint needed.
+
+### 3. Credential Policy (matched to digital literacy level)
+
+| Role    | Credential type | Validation rule       | Set by         |
+|---------|-----------------|-----------------------|----------------|
+| student | 4–6 digit PIN   | digits only, 4–6 chars | teacher/admin  |
+| teacher | password        | 8–50 chars            | admin          |
+| admin   | password        | 12–50 chars           | self or admin  |
+
+All credentials are stored as bcrypt hashes — same mechanism, different input validation. Credential rules are enforced in the service layer, not the DB.
+
+### 4. Account Creation
+
+- **Admin** can create accounts with any role (admin, teacher, student)
+- **Teacher** can create student accounts only
+- **No public self-registration** — the `POST /auth/signup` endpoint is removed
+
+When a teacher or admin creates an account, the response includes the raw PIN/password exactly once so it can be written down and handed to the user.
+
+### 5. First Admin Bootstrap
+
+On application startup, if:
+- `ADMIN_USERNAME` and `ADMIN_PASSWORD` env vars are set, AND
+- No admin account exists in the DB
+
+...the app seeds an admin account automatically. The existing `create_admin.py` script and the unprotected `/seed-roles` and `/make-admin/{username}` endpoints are deleted.
+
+New env vars added to `config.py` (all optional; seeding only runs if `ADMIN_USERNAME` and `ADMIN_PASSWORD` are both set):
+```
+ADMIN_USERNAME=          # required for seeding
+ADMIN_PASSWORD=          # required for seeding; must meet 12-char admin rule
+ADMIN_FIRST_NAME=        # optional; defaults to "Admin"
+ADMIN_LAST_NAME=         # optional; defaults to "User"
+```
+
+### 6. Password / PIN Reset
+
+| Caller  | Can reset                  | Endpoint                    |
+|---------|----------------------------|-----------------------------|
+| Admin   | Any user's password/PIN    | `POST /auth/reset-password` |
+| Teacher | Students' PINs only        | `POST /auth/reset-password` |
+| Admin   | Own password               | `POST /auth/change-password` |
+| Teacher | Own password               | `POST /auth/change-password` |
+| Student | Nothing — must ask teacher | —                           |
+
+Self-service recovery (OTP flow) is removed entirely. Children who forget their PIN ask their teacher.
+
+### 7. Token
+
+Single 8-hour JWT. No refresh token. Long enough to cover a full school day without requiring re-login mid-session. The token payload carries `sub` (username), `user_id`, and `role` (single string, not a list).
+
+---
+
+## Data Model
+
+### `accounts` table
+
+| Column            | Type        | Notes                                      |
+|-------------------|-------------|--------------------------------------------|
+| `id`              | Integer PK  |                                            |
+| `username`        | String(50)  | unique, indexed                            |
+| `hashed_password` | String      | bcrypt hash of password or PIN             |
+| `first_name`      | String(50)  |                                            |
+| `last_name`       | String(50)  |                                            |
+| `role`            | RoleEnum    | `admin` / `teacher` / `student`            |
+| `is_active`       | Boolean     | default True; admin can deactivate         |
+| `created_at`      | DateTime    | set on insert                              |
+| `updated_at`      | DateTime    | set on insert, updated on every change     |
+
+Tables removed: `roles`, `account_roles`
+
+### SQLAlchemy style
+
+All models use SQLAlchemy 2.0 `Mapped[T]` + `mapped_column()` syntax. A shared `TimestampMixin` provides `created_at` and `updated_at` to any model that needs it.
+
+---
+
+## Schema Layer
+
+All Pydantic schemas use `model_config = ConfigDict(from_attributes=True)` (Pydantic v2 style). No `class Config` blocks.
+
+Schemas follow the layering pattern: `Base → Create → Read`.
+
+Reusable `Annotated` types enforce credential rules at the schema boundary:
+
+```python
+StudentPIN      = Annotated[str, Field(pattern=r'^\d{4,6}$')]
+TeacherPassword = Annotated[str, Field(min_length=8, max_length=50)]
+AdminPassword   = Annotated[str, Field(min_length=12, max_length=50)]
+UsernameStr     = Annotated[str, Field(min_length=3, max_length=50)]
+```
+
+Role-specific validation (which `Annotated` type to apply) is enforced in the service layer using the `role` field from the request body.
+
+### Schema inventory
+
+| Schema               | Purpose                                         |
+|----------------------|-------------------------------------------------|
+| `AccountBase`        | Shared fields: username, first_name, last_name  |
+| `AccountCreate`      | Input for `POST /auth/users`: adds role, password |
+| `AccountRead`        | Response shape: adds id, role, is_active, created_at |
+| `LoginRequest`       | username + password/PIN                         |
+| `TokenResponse`      | access_token, token_type, username, role (str)  |
+| `CreateUserResponse` | `AccountRead` + one-time `credential` field     |
+| `ResetPasswordRequest` | username + new_password                       |
+| `ChangePasswordRequest` | old_password + new_password (username from token) |
+
+---
+
+## API Endpoints
+
+### Kept (modified)
+
+| Method | Path                    | Auth required         | Change                                          |
+|--------|-------------------------|-----------------------|-------------------------------------------------|
+| POST   | `/auth/token`           | None                  | Response `roles: list` → `role: str`            |
+| POST   | `/auth/reset-password`  | Admin or Teacher      | Teacher restricted to resetting students only   |
+| POST   | `/auth/change-password` | Admin or Teacher      | Bug fix: was admin-only; students excluded (teacher resets their PIN) |
+
+### New
+
+| Method | Path           | Auth required     | Description                                              |
+|--------|----------------|-------------------|----------------------------------------------------------|
+| POST   | `/auth/users`  | Admin or Teacher  | Create a user; admin: any role, teacher: student only    |
+| GET    | `/auth/users`  | Admin or Teacher  | List users; admin: all, teacher: students only           |
+| GET    | `/auth/me`     | Any authenticated | Returns current user profile                             |
+
+### Removed
+
+| Method | Path                               | Reason                                      |
+|--------|------------------------------------|---------------------------------------------|
+| POST   | `/auth/signup`                     | No public self-registration                 |
+| POST   | `/auth/seed-roles`                 | Security hole; replaced by startup seeding  |
+| POST   | `/auth/make-admin/{username}`      | Security hole; use `POST /auth/users`       |
+| POST   | `/auth/forgot-password/verify-code` | No self-service recovery                  |
+| GET    | `/auth/admin-exists`               | Not needed with env var bootstrap           |
+
+---
+
+## Files Affected
+
+### Modified
+| File                              | Change                                                      |
+|-----------------------------------|-------------------------------------------------------------|
+| `app/models/account.py`           | Rewrite: SQLAlchemy 2.0 style, add `role`, timestamps       |
+| `app/schemas/auth_schema.py`      | Rewrite: Pydantic v2, layered schemas, Annotated types      |
+| `app/schemas/account_schema.py`   | Populate: AccountBase, AccountCreate, AccountRead           |
+| `app/services/auth_service.py`    | Update: role-aware credential validation, new user creation |
+| `app/dependencies/auth.py`        | Simplify RoleChecker: `current_user.role` not `.roles`      |
+| `app/api/auth_router.py`          | Redesign: remove holes, add new endpoints                   |
+| `app/config.py`                   | Add: ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_FIRST_NAME, ADMIN_LAST_NAME |
+| `app/main.py`                     | Add: startup admin seeding logic                            |
+
+### Deleted
+| File                              | Reason                                                      |
+|-----------------------------------|-------------------------------------------------------------|
+| `app/models/role.py`              | Replaced by RoleEnum in account.py                          |
+| `app/models/account_role.py`      | Merged into accounts table                                  |
+| `app/scripts/create_admin.py`     | Replaced by env var bootstrap                               |
+| `app/scripts/create_test_users.py` | Replaced by `POST /auth/users` endpoint                    |
+
+---
+
+## Out of Scope
+
+- Content endpoint auth (book, video, audio routers) — separate plan
+- Refresh tokens — not needed for this deployment context
+- Email-based recovery — no internet access assumed
+- Frontend implementation
