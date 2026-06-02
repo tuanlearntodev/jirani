@@ -4,7 +4,7 @@ from app.models import Book, Tag
 from app.schemas.book_schema import BookCreate
 from typing import Optional
 
-class BookRepo:
+class BookRepo: 
     def __init__(self, db_session: Session):
         self.db_session = db_session
 

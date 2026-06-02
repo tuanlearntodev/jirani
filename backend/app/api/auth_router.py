@@ -5,7 +5,6 @@ from app.database import get_db
 from app.schemas.auth_schema import Token, LoginRequest, SignUpRequest, ResetPasswordRequest, ChangePasswordRequest
 from app.services.auth_service import AuthService
 from app.models.account import Account
-from app.models.role import Role
 from app.dependencies.auth import get_current_user, RoleChecker
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
