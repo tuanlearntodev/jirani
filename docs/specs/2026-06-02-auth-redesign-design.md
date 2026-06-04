@@ -74,14 +74,38 @@ The system uses a **one-time setup endpoint** (`GET /setup`) instead of environm
 
 **Recovery:** If the teacher forgets the password, they need physical access to the device to read the credentials file or delete the flag file to regenerate.
 
-**No env vars needed** — `ADMIN_USERNAME` and `ADMIN_PASSWORD` are not required in the config.
+### 6. Zero-Config Deployment
+
+No `.env` file is required. The app generates and persists all secrets automatically on first boot:
+
+| File | Purpose | Generated when |
+|---|---|---|
+| `.secret` | `SECRET_KEY` for JWT signing | First app startup |
+| `.credentials` | Admin username + password | First visit to `/setup` |
+| `.credentials_revealed` | Flag to lock `/setup` | First visit to `/setup` |
+| `jirani_library.db` | SQLite database | First app startup |
+
+All files live in `/app/data/`, which is mounted as a Docker volume. If the volume is deleted, everything resets — this is the factory reset mechanism.
+
+**`docker-compose.yml` has no secrets:**
+```yaml
+services:
+  backend:
+    image: jirani-library:latest
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+```
+
+The image is database-agnostic — `DATABASE_URL` defaults to SQLite but can be overridden to PostgreSQL via env var if needed later.
 ADMIN_USERNAME=          # required for seeding
 ADMIN_PASSWORD=          # required for seeding; must meet 12-char admin rule
 ADMIN_FIRST_NAME=        # optional; defaults to "Admin"
 ADMIN_LAST_NAME=         # optional; defaults to "User"
 ```
 
-### 6. Password / PIN Reset
+### 7. Password / PIN Reset
 
 | Caller  | Can reset                  | Endpoint                    |
 |---------|----------------------------|-----------------------------|
@@ -97,7 +121,7 @@ When a student changes their own password, they provide the new password (min 4 
 
 Self-service recovery (OTP flow) is removed entirely. Children who forget their PIN ask their teacher.
 
-### 7. Token
+### 8. Token
 
 Single 8-hour JWT. No refresh token. Long enough to cover a full school day without requiring re-login mid-session. The token payload carries `sub` (username), `user_id`, and `role` (single string, not a list).
 

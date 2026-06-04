@@ -567,72 +567,64 @@ python -c "from app.dependencies.auth import get_current_user, RoleChecker; prin
 
 ---
 
-## Task 12: Rewrite `config.py` (best practice, PostgreSQL-ready)
+## Task 12: Rewrite `config.py` (zero-config, auto-generated secrets)
 
-**Why:** The current config hardcodes SQLite and a dev secret. For production (SBC deployment), you need:
-- `DATABASE_URL` from env — supports both SQLite (dev) and PostgreSQL (production)
-- `SECRET_KEY` from env — must be unique per deployment
-- `ACCESS_TOKEN_EXPIRE_MINUTES` from env — configurable per environment
-- Sensible defaults for development, but nothing hardcoded for production
+**Why:** For headless SBC deployment, you don't want teachers managing `.env` files. Instead:
+- `SECRET_KEY` is **auto-generated on first boot** and persisted to disk — never changes across restarts
+- `DATABASE_URL` defaults to SQLite — works out of the box, PostgreSQL-ready via env var if needed later
+- No `.env` file required — `docker-compose.yml` has everything visible, no secrets baked into the image
 
-This also prepares you for a future vector database — PostgreSQL supports `pgvector` natively, so using it now means zero migration later.
+This means: `docker compose up -d` and it just works. Zero config.
 
-**Concept — 12-factor config with Pydantic Settings:**
+**Concept — Auto-generated persistent secret:**
 ```python
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import secrets
 from pathlib import Path
 
-class Settings(BaseSettings):
-    # Required — must be set in production
-    SECRET_KEY: str
-    DATABASE_URL: str
-    
-    # Optional — have sensible defaults
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
-    ALGORITHM: str = "HS256"
-    
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=True,
-    )
+SECRET_FILE = Path("/app/data/.secret")
+
+def get_secret_key() -> str:
+    if SECRET_FILE.exists():
+        return SECRET_FILE.read_text().strip()
+    key = secrets.token_urlsafe(32)
+    SECRET_FILE.write_text(key)
+    return key
 ```
+
+The key is generated once, saved to disk, and read on every startup. If the data folder is wiped, a new key is generated (which invalidates old JWT tokens — acceptable for a factory reset).
 
 **Hints for `app/config.py`:**
-- **Remove** all hardcoded defaults for secrets (`SECRET_KEY`, `ADMIN_USERNAME`, etc.)
-- **Keep** `DATABASE_URL` as a string — SQLAlchemy handles the dialect switch automatically:
-  - Dev: `sqlite:///./data/jirani_library.db`
-  - Production: `postgresql://jirani:password@db:5432/jirani`
-- **Add** `SECRET_KEY` with no default — must be set via env var
+- **Remove** `env_file=".env"` from `model_config` — no `.env` file needed
+- **Remove** hardcoded `SECRET_KEY` — use `get_secret_key()` as the default
+- **Keep** `DATABASE_URL` with a sensible default: `sqlite:///./data/jirani_library.db`
+- **Add** `DATA_DIR: Path = BASE_DIR / "data"` — shared location for `.secret`, `.credentials`, and the SQLite DB
 - **Add** `ACCESS_TOKEN_EXPIRE_MINUTES: int = 480` (8 hours)
-- **Add** `BASE_DIR` for file paths (upload dirs, etc.)
-- **Keep** `UPLOAD_DIR`, `COVER_DIR`, `MAX_UPLOAD_SIZE` — these are unchanged
-- **Remove** `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_FIRST_NAME`, `ADMIN_LAST_NAME` — no longer needed (replaced by `/setup` endpoint)
-
-**Database URL examples:**
-```
-# SQLite (development)
-DATABASE_URL=sqlite:///./data/jirani_library.db
-
-# PostgreSQL (production on SBC)
-DATABASE_URL=postgresql://jirani:jirani_password@localhost:5432/jirani
-```
+- **Keep** `UPLOAD_DIR`, `COVER_DIR`, `MAX_UPLOAD_SIZE` — unchanged
+- **Remove** all `ADMIN_*` env vars — replaced by `/setup` endpoint
+- **Add** `ALGORITHM: str = "HS256"` — unchanged
+- Override `SECRET_KEY` in `__init__` if it's empty:
+  ```python
+  def __init__(self, **kwargs):
+      super().__init__(**kwargs)
+      if not self.SECRET_KEY:
+          self.SECRET_KEY = get_secret_key()
+  ```
 
 **Verify:**
 ```bash
 cd backend
-# Should fail without SECRET_KEY
-python -c "from app.config import settings"
-# → ValidationError: SECRET_KEY field required
+# Should work with no env vars at all
+python -c "from app.config import settings; print(settings.SECRET_KEY[:8] + '...')"
+# → Some random string (auto-generated)
 
-# Should work with env var
-SECRET_KEY=testkey DATABASE_URL=sqlite:///./test.db python -c "from app.config import settings; print(settings.DATABASE_URL)"
-# → sqlite:///./test.db
+# Run again — should return the SAME key
+python -c "from app.config import settings; print(settings.SECRET_KEY[:8] + '...')"
+# → Same string (persisted to disk)
 ```
 
 - [ ] Rewrite `app/config.py`
-- [ ] Verify: fails without SECRET_KEY, works with env vars
-- [ ] Commit: `git commit -m "config: rewrite with best-practice env vars, PostgreSQL-ready"`
+- [ ] Verify: auto-generates SECRET_KEY, persists across runs
+- [ ] Commit: `git commit -m "config: zero-config with auto-generated persistent SECRET_KEY"`
 
 ---
 
@@ -820,25 +812,12 @@ Start the server and test each endpoint via Swagger UI (`http://localhost:8000/d
 
 ---
 
-## Task 16: Update `.env.example`
+## Task 16: Delete `.env.example` (no longer needed)
 
-**Why:** `.env.example` is documentation for anyone who clones this project. It tells them what environment variables the app needs, without exposing real values.
+**Why:** The app is zero-config — no `.env` file required. All secrets are auto-generated. The `.env.example` file is misleading because it implies the user needs to configure something.
 
-- [ ] Open `.env.example`
-- [ ] Replace the old content with:
-  ```
-  # Required — generate a unique key per deployment
-  # openssl rand -hex 32
-  SECRET_KEY=
-
-  # Database — SQLite for dev, PostgreSQL for production
-  DATABASE_URL=sqlite:///./data/jirani_library.db
-  # DATABASE_URL=postgresql://jirani:password@localhost:5432/jirani
-
-  # Token expiry (minutes) — 480 = 8 hours
-  ACCESS_TOKEN_EXPIRE_MINUTES=480
-  ```
-- [ ] Commit: `git commit -m "docs: update .env.example with new config vars"`
+- [ ] Delete `.env.example`
+- [ ] Commit: `git commit -m "chore: remove .env.example — app is zero-config"`
 
 ---
 
