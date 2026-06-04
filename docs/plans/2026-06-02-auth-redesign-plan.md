@@ -40,7 +40,7 @@ In a real production app, you would use **Alembic** to write migration scripts t
 
 | File | Action | What changes |
 |---|---|---|
-| `app/models/enums.py` | **Create** | `RoleEnum` lives here |
+| `app/models/role_enum.py` | **Create** | `RoleEnum` lives here |
 | `app/models/base.py` | **Create** | `TimestampMixin` lives here |
 | `app/models/account.py` | **Rewrite** | SQLAlchemy 2.0 style, add `role`, timestamps |
 | `app/models/role.py` | **Delete** | Replaced by `RoleEnum` |
@@ -48,7 +48,8 @@ In a real production app, you would use **Alembic** to write migration scripts t
 | `app/models/__init__.py` | **Update** | Remove old imports |
 | `app/schemas/auth_schema.py` | **Rewrite** | Pydantic v2 style, Annotated types |
 | `app/schemas/account_schema.py` | **Populate** | Layered schemas: Base → Create → Read |
-| `app/services/auth_service.py` | **Update** | Role-aware credential validation, new user creation |
+| `app/repositories/auth_repo.py` | **Create** | DB queries for auth (get_by_username, create, list, etc.) |
+| `app/services/auth_service.py` | **Update** | Role-aware credential validation, uses AuthRepo |
 | `app/dependencies/auth.py` | **Update** | Simplify `RoleChecker` for single-role model |
 | `app/config.py` | **Update** | Add admin bootstrap env vars |
 | `app/main.py` | **Update** | Startup admin seeding |
@@ -382,13 +383,54 @@ print(data)
 
 ---
 
-## Task 9: Update `AuthService`
+## Task 9: Create `AuthRepo`
+
+**Why:** You already use the repository pattern for books (`BookRepo` + `BookService`). Using the same pattern for auth keeps the codebase consistent. The repo handles **database queries only** — no business logic, no validation, no hashing. The service layer does all that.
+
+**Concept — Repository pattern:**
+```
+Router → Service (business logic: validation, hashing, tokens)
+              ↓
+         Repo (database queries only: get, create, list)
+              ↓
+          Database
+```
+
+This separation means:
+- `AuthService` is easy to test (mock the repo)
+- `AuthRepo` is reusable (any service can call it)
+- Each class has one clear job
+
+**Hints for `app/repositories/auth_repo.py`:**
+- Create the file: `app/repositories/auth_repo.py`
+- Follow the same pattern as `BookRepo` — take a `Session` in `__init__`
+- Implement these methods:
+  - `get_by_username(username: str) -> Optional[Account]` — `db.query(Account).filter(...).first()`
+  - `get_by_id(user_id: int) -> Optional[Account]` — `db.query(Account).get(user_id)`
+  - `create(account: Account) -> Account` — `db.add(account); db.commit(); db.refresh(account); return account`
+  - `list_all(role: Optional[RoleEnum] = None) -> list[Account]` — if `role` is provided, filter by it; otherwise return all
+  - `has_admin() -> bool` — check if any account with `role == RoleEnum.admin` exists
+
+**Verify:**
+```bash
+cd backend
+python -c "from app.repositories.auth_repo import AuthRepo; print('OK')"
+```
+
+- [ ] Create `app/repositories/auth_repo.py`
+- [ ] Verify no import errors
+- [ ] Commit: `git commit -m "feat: add AuthRepo for database queries"`
+
+---
+
+## Task 10: Update `AuthService`
 
 **Why:** The service layer is where business logic lives. Now that the model has changed, the service needs to:
 1. Auto-generate 6-digit passwords for new student accounts
 2. Validate credentials against role-specific rules (self-change for students, password strength for teachers/admins)
 3. Create users with a specified role
 4. Work with `account.role` (a single enum) instead of `account.roles` (a list)
+5. Use `AuthRepo` for all database operations instead of direct `db.query()`
 
 **Concept — Role-aware credential validation:**
 The validation logic depends on the **context** (creation vs self-change):
@@ -414,22 +456,24 @@ This logic belongs in the service, not the router and not the schema (because it
 
 **Hints for `app/services/auth_service.py`:**
 - Add a helper: `generate_student_password() -> str` — returns a random 6-digit string. Use Python's `random.randint(100000, 999999)` and convert to string with `str()`.
-- Add a static method: `validate_credential(role: RoleEnum, password: str, context: str = "create") -> None` — the `context` parameter is either `"create"`, `"self_change"`, or `"reset"`. Raises `ValueError` with a descriptive message if the credential doesn't meet the rule.
+- Add a static method: `validate_credentials(role: RoleEnum, password: str, context: str = "create") -> None` — the `context` parameter is either `"create"`, `"self_change"`, or `"reset"`. Raises `ValueError` with a descriptive message if the credential doesn't meet the rule.
   - For `context="create"` and `role=student`: skip validation (password is auto-generated)
   - For `context="self_change"` and `role=student`: min 4 chars
   - For `context="create"` and `role=teacher`: min 8 chars
-  - For `context="create"` and `role=admin`: min 12 chars
-  - etc.
-- Update `create_user` to accept `role: RoleEnum` as a parameter. If `role == RoleEnum.student`, call `generate_student_password()` to get the password, hash it, and return the raw password alongside the account. For teacher/admin, use the password from the request and validate it.
-- Update `authenticate_user` — the query no longer needs to worry about roles; it just returns the account if username and password match and `is_active` is True
+  - For `context="create"` and `role=admin`: min 8 chars
+  - For `context="self_change"` and `role=teacher/admin`: min 8 chars
+  - For `context="reset"`: skip validation (student gets auto-generated, teacher/admin uses provided password)
+- Update `create_user` to accept `db: Session` and `account_data: AccountCreate`. If `role == RoleEnum.student`, call `generate_student_password()` to get the password, hash it, and return the raw password alongside the account. For teacher/admin, use the password from the request and validate it. Use `AuthRepo(db)` for the DB operations.
+- Update `authenticate_user` — use `AuthRepo(db).get_by_username()` instead of direct query
 - Update `create_token_for_user` — the token payload should have `"role": account.role.value` (a single string) instead of `"roles": [list]`
-- Remove `reset_password`'s direct DB query — it already takes `username`, so just use `get_user_by_username` to stay DRY
+- Remove `reset_password`'s direct DB query — use `AuthRepo(db).get_by_username()` to stay DRY
 - Remove anything that references `recovery_code_hash`
 
 **Imports you will need:**
 ```python
 import random
-from app.models.enums import RoleEnum
+from app.models import RoleEnum
+from app.repositories.auth_repo import AuthRepo
 ```
 
 **Verify:**
@@ -437,7 +481,7 @@ from app.models.enums import RoleEnum
 cd backend
 python -c "
 from app.services.auth_service import AuthService
-from app.models.enums import RoleEnum
+from app.models import RoleEnum
 
 # Creation context - student gets auto-generated password
 pw = AuthService.generate_student_password()
@@ -445,21 +489,21 @@ print(f'Auto-generated student password: {pw}')
 assert len(pw) == 6 and pw.isdigit()
 
 # Creation context - teacher and admin password validation
-AuthService.validate_credential(RoleEnum.teacher, 'password1', 'create')
-AuthService.validate_credential(RoleEnum.admin, 'password1', 'create')
+AuthService.validate_credentials(RoleEnum.teacher, 'password1', 'create')
+AuthService.validate_credentials(RoleEnum.admin, 'password1', 'create')
 print('valid credentials OK')
 
 # Self-change context - student can use short password
-AuthService.validate_credential(RoleEnum.student, 'cat', 'self_change')  # should raise (too short)
+AuthService.validate_credentials(RoleEnum.student, 'cat', 'self_change')  # should raise (too short)
 try:
-    AuthService.validate_credential(RoleEnum.student, 'cats', 'self_change')
+    AuthService.validate_credentials(RoleEnum.student, 'cats', 'self_change')
     print('student self-change with 4 chars OK')
 except ValueError as e:
     print(f'ERROR: should have accepted: {e}')
 
 # Self-change context - student too short should raise
 try:
-    AuthService.validate_credential(RoleEnum.student, 'abc', 'self_change')
+    AuthService.validate_credentials(RoleEnum.student, 'abc', 'self_change')
     print('ERROR: should have raised')
 except ValueError as e:
     print(f'Correctly rejected short password: {e}')
@@ -468,11 +512,11 @@ except ValueError as e:
 
 - [ ] Update `app/services/auth_service.py`
 - [ ] Verify with the REPL snippet
-- [ ] Commit: `git commit -m "refactor: update AuthService for single-role model"`
+- [ ] Commit: `git commit -m "refactor: update AuthService for single-role model with AuthRepo"`
 
 ---
 
-## Task 10: Simplify `RoleChecker` in `dependencies/auth.py`
+## Task 11: Simplify `RoleChecker` in `dependencies/auth.py`
 
 **Why:** With a single `role` attribute instead of a `roles` list, `RoleChecker` becomes dramatically simpler. Understanding FastAPI's `Depends()` system is important — it's how you inject shared logic (like "get the current user") into route handlers without repeating yourself.
 
@@ -521,7 +565,7 @@ python -c "from app.dependencies.auth import get_current_user, RoleChecker; prin
 
 ---
 
-## Task 11: Add admin bootstrap env vars to `config.py`
+## Task 12: Add admin bootstrap env vars to `config.py`
 
 **Why:** Hardcoding credentials in scripts is a security risk. The **12-factor app** methodology says configuration (secrets, URLs, usernames) should come from environment variables — that way the same code runs in dev with test credentials and in production with real ones, and secrets never end up in git.
 
@@ -559,7 +603,7 @@ python -c "from app.config import settings; print(settings.ADMIN_USERNAME, setti
 
 ---
 
-## Task 12: Add startup admin seeding to `main.py`
+## Task 13: Add startup admin seeding to `main.py`
 
 **Why:** The lifespan context manager in FastAPI is the right place for startup logic — things that must run once when the app boots. Seeding the first admin here means you don't need a separate script, and Docker deployments just need the right env vars.
 
@@ -605,7 +649,7 @@ app = FastAPI(lifespan=lifespan)
 
 ---
 
-## Task 13: Redesign `auth_router.py`
+## Task 14: Redesign `auth_router.py`
 
 **Why:** This is the biggest change — adding new endpoints, fixing bugs, and deleting the security holes. Each endpoint should do one thing: validate input, call the service, return the response.
 
@@ -631,8 +675,7 @@ Delete the entire `seed_roles` and `make_admin` endpoint functions. They are gon
 
 ### `GET /auth/users` (list users — new)
 - Protect with `Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher]))`
-- Query `db.query(Account)`
-- If `current_user.role == RoleEnum.teacher`, filter to `role == RoleEnum.student` only
+- Use `AuthRepo(db).list_all(role=RoleEnum.student)` if caller is a teacher, otherwise `AuthRepo(db).list_all()` for admin
 - Return a `list[AccountRead]`
 
 ### `GET /auth/me` (current user — new)
@@ -679,7 +722,7 @@ Start the server and test each endpoint via Swagger UI (`http://localhost:8000/d
 
 ---
 
-## Task 14: Update `.env.example`
+## Task 15: Update `.env.example`
 
 **Why:** `.env.example` is documentation for anyone who clones this project. It tells them what environment variables the app needs, without exposing real values.
 
@@ -700,7 +743,7 @@ Start the server and test each endpoint via Swagger UI (`http://localhost:8000/d
 
 ---
 
-## Task 15: Delete old scripts
+## Task 16: Delete old scripts
 
 **Why:** The old scripts create users by directly manipulating the DB, bypassing all validation. The new `POST /auth/users` endpoint replaces them. Keeping dead scripts causes confusion.
 
@@ -711,7 +754,7 @@ Start the server and test each endpoint via Swagger UI (`http://localhost:8000/d
 
 ---
 
-## Task 16: Write tests
+## Task 17: Write tests
 
 **Why:** Tests prove the system works as designed and protect you from breaking it when you make future changes. FastAPI has a built-in test client (`TestClient`) that lets you make HTTP requests to your app without running a real server.
 
