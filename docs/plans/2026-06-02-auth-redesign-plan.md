@@ -219,7 +219,7 @@ python -c "from app.models.account import Account; print(Account.__table__.colum
 **Find references:**
 ```bash
 # Run from the backend/app directory
-grep -rn "from app.models.role\|from app.models.account_role\|AccountRole\|from app.models import.*Role" --include="*.py" .
+ 
 ```
 
 Fix every file that comes up.
@@ -301,9 +301,10 @@ class LoginRequest(BaseModel):
 **Hints for `app/schemas/auth_schema.py`:**
 - At the top of the file, define these reusable types:
   - `UsernameStr` — min 3, max 50 chars
-  - `StudentPIN` — must match the regex pattern `r'^\d{4,6}$'` (4 to 6 digits, nothing else). Use `Field(pattern=...)`
+  - `StudentSelfChangePassword` — min 4, max 50 chars (for when a student changes their own password)
   - `TeacherPassword` — min 8, max 50 chars
   - `AdminPassword` — min 12, max 50 chars
+- Note: there is no `StudentPIN` type — student initial passwords are auto-generated in the service layer, not validated at the schema level
 - Define these schemas (replace the entire file):
   - `LoginRequest`: `username: str`, `password: str` (no strict validation at login — wrong credentials get a 401, not a 422)
   - `TokenResponse`: `access_token: str`, `token_type: str = "bearer"`, `username: str`, `role: str` — note: `role` is now a single string, not a list
@@ -385,23 +386,41 @@ print(data)
 ## Task 9: Update `AuthService`
 
 **Why:** The service layer is where business logic lives. Now that the model has changed, the service needs to:
-1. Validate the credential against the role-specific rule (PIN for students, password for teachers/admins)
-2. Create users with a specified role
-3. Work with `account.role` (a single enum) instead of `account.roles` (a list)
+1. Auto-generate 6-digit passwords for new student accounts
+2. Validate credentials against role-specific rules (self-change for students, password strength for teachers/admins)
+3. Create users with a specified role
+4. Work with `account.role` (a single enum) instead of `account.roles` (a list)
 
 **Concept — Role-aware credential validation:**
-The validation logic should be:
+The validation logic depends on the **context** (creation vs self-change):
+
 ```
-if role is student  → password must match r'^\d{4,6}$'
-if role is teacher  → password length must be 8-50
-if role is admin    → password length must be 12-50
+On account creation:
+  if role is student  → auto-generate random 6-digit number (e.g. "482719")
+  if role is teacher  → password length must be 8-50
+  if role is admin    → password length must be 12-50
+
+On self-change (change-password endpoint):
+  if role is student  → password length must be 4-50 (relaxed for kids)
+  if role is teacher  → password length must be 8-50
+  if role is admin    → password length must be 12-50
+
+On reset by teacher/admin:
+  if role is student  → auto-generate new random 6-digit number
+  if role is teacher  → use the password provided in the request
 ```
 
-This logic belongs in the service, not the router and not the schema (because it depends on two fields together — `role` + `password`).
+This logic belongs in the service, not the router and not the schema (because it depends on two fields together — `role` + `password` — and the context of the operation).
 
 **Hints for `app/services/auth_service.py`:**
-- Add a new static method: `validate_credential(role: RoleEnum, password: str) -> None` — raises `ValueError` with a descriptive message if the credential doesn't meet the rule for that role. Use `re.match` for the PIN pattern.
-- Update `create_user` to accept `role: RoleEnum` as a parameter, call `validate_credential` before hashing, and set `account.role = role`
+- Add a helper: `generate_student_password() -> str` — returns a random 6-digit string. Use Python's `random.randint(100000, 999999)` and convert to string with `str()`.
+- Add a static method: `validate_credential(role: RoleEnum, password: str, context: str = "create") -> None` — the `context` parameter is either `"create"`, `"self_change"`, or `"reset"`. Raises `ValueError` with a descriptive message if the credential doesn't meet the rule.
+  - For `context="create"` and `role=student`: skip validation (password is auto-generated)
+  - For `context="self_change"` and `role=student`: min 4 chars
+  - For `context="create"` and `role=teacher`: min 8 chars
+  - For `context="create"` and `role=admin`: min 12 chars
+  - etc.
+- Update `create_user` to accept `role: RoleEnum` as a parameter. If `role == RoleEnum.student`, call `generate_student_password()` to get the password, hash it, and return the raw password alongside the account. For teacher/admin, use the password from the request and validate it.
 - Update `authenticate_user` — the query no longer needs to worry about roles; it just returns the account if username and password match and `is_active` is True
 - Update `create_token_for_user` — the token payload should have `"role": account.role.value` (a single string) instead of `"roles": [list]`
 - Remove `reset_password`'s direct DB query — it already takes `username`, so just use `get_user_by_username` to stay DRY
@@ -409,7 +428,7 @@ This logic belongs in the service, not the router and not the schema (because it
 
 **Imports you will need:**
 ```python
-import re
+import random
 from app.models.enums import RoleEnum
 ```
 
@@ -419,18 +438,31 @@ cd backend
 python -c "
 from app.services.auth_service import AuthService
 from app.models.enums import RoleEnum
-# Should not raise
-AuthService.validate_credential(RoleEnum.student, '1234')
-AuthService.validate_credential(RoleEnum.teacher, 'mypassword')
-AuthService.validate_credential(RoleEnum.admin, 'strongpassword1')
+
+# Creation context - student gets auto-generated password
+pw = AuthService.generate_student_password()
+print(f'Auto-generated student password: {pw}')
+assert len(pw) == 6 and pw.isdigit()
+
+# Creation context - teacher password validation
+AuthService.validate_credential(RoleEnum.teacher, 'mypassword', 'create')
+AuthService.validate_credential(RoleEnum.admin, 'strongpassword1', 'create')
 print('valid credentials OK')
 
-# Should raise ValueError
+# Self-change context - student can use short password
+AuthService.validate_credential(RoleEnum.student, 'cat', 'self_change')  # should raise (too short)
 try:
-    AuthService.validate_credential(RoleEnum.student, 'abc')
+    AuthService.validate_credential(RoleEnum.student, 'cats', 'self_change')
+    print('student self-change with 4 chars OK')
+except ValueError as e:
+    print(f'ERROR: should have accepted: {e}')
+
+# Self-change context - student too short should raise
+try:
+    AuthService.validate_credential(RoleEnum.student, 'abc', 'self_change')
     print('ERROR: should have raised')
 except ValueError as e:
-    print(f'Correctly rejected: {e}')
+    print(f'Correctly rejected short password: {e}')
 "
 ```
 
@@ -595,7 +627,7 @@ Delete the entire `seed_roles` and `make_admin` endpoint functions. They are gon
 - Add a **role restriction check**: if `current_user.role == RoleEnum.teacher` and the requested `account_data.role != RoleEnum.student`, raise `HTTPException(status_code=403, detail="Teachers can only create student accounts")`
 - Call `AuthService.create_user(db, account_data)` — it may raise `ValueError` (weak credential, duplicate username) — catch that and raise `HTTPException(400, ...)`
 - Return `CreateUserResponse` — include the raw `credential` (the plain text password before hashing) so the teacher can write it down and hand it to the student
-- **Important:** The raw password must be captured BEFORE you hash it. Think about where in the flow you have access to it.
+- **Important:** For student accounts, the password is auto-generated by the service. For teacher/admin accounts, the password comes from the request body. The service returns the raw credential in both cases.
 
 ### `GET /auth/users` (list users — new)
 - Protect with `Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher]))`
@@ -612,12 +644,14 @@ Delete the entire `seed_roles` and `make_admin` endpoint functions. They are gon
 - Add restriction: if `current_user.role == RoleEnum.teacher`:
   - Look up the target user by username
   - If target user's role is not `student`, raise `HTTPException(403, "Teachers can only reset student PINs")`
+- For **student** accounts: auto-generate a new 6-digit password via `AuthService.generate_student_password()` and return it in the response
+- For **teacher/admin** accounts: use the `new_password` from the request body
 
 ### `POST /auth/change-password` (fix)
-- Fix the protection: `Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher]))` 
+- Fix the protection: `Depends(get_current_user)` — **any authenticated user** can change their own password (not just admin/teacher)
 - Remove the `username` field from the request — the user comes from `current_user`
 - Verify `old_password` against `current_user.hashed_password`
-- Call `AuthService.validate_credential(current_user.role, change_data.new_password)` to enforce role-appropriate strength rules
+- Call `AuthService.validate_credential(current_user.role, change_data.new_password, context="self_change")` to enforce role-appropriate strength rules (student: min 4 chars, teacher: 8+, admin: 12+)
 - Hash and save the new password
 
 **Removed endpoints** — delete these functions entirely:
@@ -631,10 +665,13 @@ Delete the entire `seed_roles` and `make_admin` endpoint functions. They are gon
 Start the server and test each endpoint via Swagger UI (`http://localhost:8000/docs`):
 1. Login with the seeded admin → get token
 2. Use the token to call `POST /auth/users` to create a teacher account
-3. Use teacher token to call `POST /auth/users` to create a student account (with a 4-digit PIN)
+3. Use teacher token to call `POST /auth/users` to create a student account → response includes auto-generated 6-digit password
 4. Try to create an admin as a teacher → should get 403
 5. Call `GET /auth/me` with the student token → should return student profile
 6. Call `GET /auth/users` as teacher → should only see students
+7. Login as the student with the auto-generated password → should work
+8. As the student, call `POST /auth/change-password` with a new 4+ char password → should work
+9. As the teacher, call `POST /auth/reset-password` for the student → should return a new 6-digit password
 
 - [ ] Rewrite `app/api/auth_router.py`
 - [ ] Test each endpoint manually via Swagger
@@ -716,11 +753,13 @@ def test_login_success():
   ```
 - Write tests for at least these cases:
   1. `test_login_wrong_password` → 401
-  2. `test_create_student_as_admin` → 201, credential in response
+  2. `test_create_student_as_admin` → 201, auto-generated 6-digit credential in response
   3. `test_create_admin_as_teacher` → 403
-  4. `test_reset_student_pin_as_teacher` → 200
+  4. `test_reset_student_password_as_teacher` → 200, new 6-digit credential in response
   5. `test_reset_teacher_password_as_teacher` → 403 (teacher can't reset other teachers)
   6. `test_get_users_as_teacher_only_sees_students` → 200, all returned roles are `student`
+  7. `test_student_can_change_own_password` → 200, with min 4 char password
+  8. `test_student_change_password_too_short` → 422 (password < 4 chars)
 
 **Run tests:**
 ```bash
@@ -769,3 +808,5 @@ After completing this plan, you will have hands-on experience with:
 - **bcrypt** — why you hash passwords and never store them plain
 - **API security basics** — why open endpoints are dangerous, RBAC patterns
 - **Testing FastAPI** — `TestClient`, in-memory DB for test isolation
+- **Auto-generated credentials** — when to let the system generate passwords vs requiring user input
+- **Context-aware validation** — different rules for creation, self-change, and admin reset

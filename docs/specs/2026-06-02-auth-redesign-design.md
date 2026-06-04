@@ -39,11 +39,15 @@ Enforced as a Python `enum.Enum` and stored as a native DB enum column. No Check
 
 ### 3. Credential Policy (matched to digital literacy level)
 
-| Role    | Credential type | Validation rule       | Set by         |
-|---------|-----------------|-----------------------|----------------|
-| student | 4–6 digit PIN   | digits only, 4–6 chars | teacher/admin  |
-| teacher | password        | 8–50 chars            | admin          |
-| admin   | password        | 12–50 chars           | self or admin  |
+| Role    | Initial credential     | Validation rule (on creation) | Validation rule (on self-change) | Set by         |
+|---------|------------------------|-------------------------------|-----------------------------------|----------------|
+| student | 6-digit auto-generated | exactly 6 digits              | min 4 chars, any characters       | system (auto)  |
+| teacher | password               | 8–50 chars                    | 8–50 chars                        | admin          |
+| admin   | password               | 12–50 chars                   | 12–50 chars                       | self or admin  |
+
+When a teacher or admin creates a student account, the system **auto-generates** a 6-digit random number as the initial password. It is returned in the response so the teacher can write it down and hand it to the student.
+
+Students **can change their own password** at any time via `POST /auth/change-password`. The new password must be at least 4 characters. This gives kids the freedom to pick something they can remember without being locked into a random number.
 
 All credentials are stored as bcrypt hashes — same mechanism, different input validation. Credential rules are enforced in the service layer, not the DB.
 
@@ -53,7 +57,9 @@ All credentials are stored as bcrypt hashes — same mechanism, different input 
 - **Teacher** can create student accounts only
 - **No public self-registration** — the `POST /auth/signup` endpoint is removed
 
-When a teacher or admin creates an account, the response includes the raw PIN/password exactly once so it can be written down and handed to the user.
+For **student** accounts, the system auto-generates a 6-digit random number as the initial password. The response includes this raw credential exactly once so it can be written down and handed to the student.
+
+For **teacher** and **admin** accounts, the creator provides the password in the request body.
 
 ### 5. First Admin Bootstrap
 
@@ -79,7 +85,11 @@ ADMIN_LAST_NAME=         # optional; defaults to "User"
 | Teacher | Students' PINs only        | `POST /auth/reset-password` |
 | Admin   | Own password               | `POST /auth/change-password` |
 | Teacher | Own password               | `POST /auth/change-password` |
-| Student | Nothing — must ask teacher | —                           |
+| Student | Own password               | `POST /auth/change-password` |
+
+When a teacher or admin resets a student's password, a new 6-digit random number is auto-generated and returned in the response.
+
+When a student changes their own password, they provide the new password (min 4 chars) themselves.
 
 Self-service recovery (OTP flow) is removed entirely. Children who forget their PIN ask their teacher.
 
@@ -122,13 +132,13 @@ Schemas follow the layering pattern: `Base → Create → Read`.
 Reusable `Annotated` types enforce credential rules at the schema boundary:
 
 ```python
-StudentPIN      = Annotated[str, Field(pattern=r'^\d{4,6}$')]
-TeacherPassword = Annotated[str, Field(min_length=8, max_length=50)]
-AdminPassword   = Annotated[str, Field(min_length=12, max_length=50)]
-UsernameStr     = Annotated[str, Field(min_length=3, max_length=50)]
+StudentSelfChangePassword = Annotated[str, Field(min_length=4, max_length=50)]
+TeacherPassword           = Annotated[str, Field(min_length=8, max_length=50)]
+AdminPassword             = Annotated[str, Field(min_length=12, max_length=50)]
+UsernameStr               = Annotated[str, Field(min_length=3, max_length=50)]
 ```
 
-Role-specific validation (which `Annotated` type to apply) is enforced in the service layer using the `role` field from the request body.
+Student initial passwords are auto-generated (6 digits) in the service layer — no schema-level validation needed for creation. Role-specific validation for teacher/admin passwords and student self-change is enforced in the service layer.
 
 ### Schema inventory
 
@@ -153,7 +163,7 @@ Role-specific validation (which `Annotated` type to apply) is enforced in the se
 |--------|-------------------------|-----------------------|-------------------------------------------------|
 | POST   | `/auth/token`           | None                  | Response `roles: list` → `role: str`            |
 | POST   | `/auth/reset-password`  | Admin or Teacher      | Teacher restricted to resetting students only   |
-| POST   | `/auth/change-password` | Admin or Teacher      | Bug fix: was admin-only; students excluded (teacher resets their PIN) |
+| POST   | `/auth/change-password` | Any authenticated     | Bug fix: was admin-only; now any user can change their own password (student: min 4 chars, teacher: 8+, admin: 12+) |
 
 ### New
 
