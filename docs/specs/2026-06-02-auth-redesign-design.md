@@ -63,14 +63,18 @@ For **teacher** and **admin** accounts, the creator provides the password in the
 
 ### 5. First Admin Bootstrap
 
-On application startup, if:
-- `ADMIN_USERNAME` and `ADMIN_PASSWORD` env vars are set, AND
-- No admin account exists in the DB
+The system uses a **one-time setup endpoint** (`GET /setup`) instead of environment variables for the first admin. This is designed for headless SBC deployment — the teacher connects their phone to the SBC's network, opens `http://<sbc-ip>/setup` in their browser, and sees the admin password exactly once.
 
-...the app seeds an admin account automatically. The existing `create_admin.py` script and the unprotected `/seed-roles` and `/make-admin/{username}` endpoints are deleted.
+**How it works:**
+1. On first visit to `/setup`, the app generates a unique admin password using `secrets.token_urlsafe(8)`
+2. The credentials are saved to a JSON file on disk (`/app/data/.credentials`)
+3. A flag file (`/app/data/.credentials_revealed`) is created to prevent showing the password again
+4. On subsequent visits, `/setup` returns 403 "Already configured"
+5. If the data directory is wiped (hard reset), the next visit to `/setup` generates new credentials
 
-New env vars added to `config.py` (all optional; seeding only runs if `ADMIN_USERNAME` and `ADMIN_PASSWORD` are both set):
-```
+**Recovery:** If the teacher forgets the password, they need physical access to the device to read the credentials file or delete the flag file to regenerate.
+
+**No env vars needed** — `ADMIN_USERNAME` and `ADMIN_PASSWORD` are not required in the config.
 ADMIN_USERNAME=          # required for seeding
 ADMIN_PASSWORD=          # required for seeding; must meet 12-char admin rule
 ADMIN_FIRST_NAME=        # optional; defaults to "Admin"
@@ -177,10 +181,10 @@ UsernameStr               = Annotated[str, Field(min_length=3, max_length=50)]
 | Method | Path                               | Reason                                      |
 |--------|------------------------------------|---------------------------------------------|
 | POST   | `/auth/signup`                     | No public self-registration                 |
-| POST   | `/auth/seed-roles`                 | Security hole; replaced by startup seeding  |
+| POST   | `/auth/seed-roles`                 | Security hole; replaced by `/setup` endpoint      |
 | POST   | `/auth/make-admin/{username}`      | Security hole; use `POST /auth/users`       |
 | POST   | `/auth/forgot-password/verify-code` | No self-service recovery                  |
-| GET    | `/auth/admin-exists`               | Not needed with env var bootstrap           |
+| GET    | `/auth/admin-exists`               | Not needed with `/setup` endpoint           |
 
 ---
 
@@ -195,15 +199,23 @@ UsernameStr               = Annotated[str, Field(min_length=3, max_length=50)]
 | `app/services/auth_service.py`    | Update: role-aware credential validation, new user creation |
 | `app/dependencies/auth.py`        | Simplify RoleChecker: `current_user.role` not `.roles`      |
 | `app/api/auth_router.py`          | Redesign: remove holes, add new endpoints                   |
-| `app/config.py`                   | Add: ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_FIRST_NAME, ADMIN_LAST_NAME |
-| `app/main.py`                     | Add: startup admin seeding logic                            |
+| `app/config.py`                   | Rewrite: DATABASE_URL, SECRET_KEY from env, PostgreSQL-ready |
+| `app/main.py`                     | Update: ensure data dir, register setup router              |
+
+### Created
+| File                              | Purpose                                                     |
+|-----------------------------------|-------------------------------------------------------------|
+| `app/models/role_enum.py`         | `RoleEnum` for admin/teacher/student                        |
+| `app/models/base.py`              | `TimestampMixin` for shared timestamp columns               |
+| `app/repositories/auth_repo.py`   | Database queries for auth                                   |
+| `app/api/setup_router.py`         | `/setup` endpoint for one-time admin credential generation  |
 
 ### Deleted
 | File                              | Reason                                                      |
 |-----------------------------------|-------------------------------------------------------------|
 | `app/models/role.py`              | Replaced by RoleEnum in account.py                          |
 | `app/models/account_role.py`      | Merged into accounts table                                  |
-| `app/scripts/create_admin.py`     | Replaced by env var bootstrap                               |
+| `app/scripts/create_admin.py`     | Replaced by `/setup` endpoint                               |
 | `app/scripts/create_test_users.py` | Replaced by `POST /auth/users` endpoint                    |
 
 ---

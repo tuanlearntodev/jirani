@@ -51,12 +51,14 @@ In a real production app, you would use **Alembic** to write migration scripts t
 | `app/repositories/auth_repo.py` | **Create** | DB queries for auth (get_by_username, create, list, etc.) |
 | `app/services/auth_service.py` | **Update** | Role-aware credential validation, uses AuthRepo |
 | `app/dependencies/auth.py` | **Update** | Simplify `RoleChecker` for single-role model |
-| `app/config.py` | **Update** | Add admin bootstrap env vars |
-| `app/main.py` | **Update** | Startup admin seeding |
+| `app/config.py` | **Rewrite** | Best-practice config: DATABASE_URL, SECRET_KEY from env, PostgreSQL-ready |
+| `app/main.py` | **Update** | Startup: ensure upload dirs, no env var seeding |
 | `app/api/auth_router.py` | **Rewrite** | Remove holes, add new endpoints |
-| `app/scripts/create_admin.py` | **Delete** | Replaced by env var bootstrap |
+| `app/api/setup_router.py` | **Create** | `/setup` endpoint — one-time admin credential generation |
+| `app/api/setup_router.py` | **Create** | `/setup` endpoint — one-time admin credential generation |
+| `app/scripts/create_admin.py` | **Delete** | Replaced by `/setup` endpoint |
 | `app/scripts/create_test_users.py` | **Delete** | Replaced by `POST /auth/users` |
-| `.env.example` | **Update** | Document new env vars |
+| `.env.example` | **Update** | Document DATABASE_URL, SECRET_KEY, and other config |
 | `app/tests/test_auth.py` | **Create** | Tests for new auth endpoints |
 
 ---
@@ -565,91 +567,187 @@ python -c "from app.dependencies.auth import get_current_user, RoleChecker; prin
 
 ---
 
-## Task 12: Add admin bootstrap env vars to `config.py`
+## Task 12: Rewrite `config.py` (best practice, PostgreSQL-ready)
 
-**Why:** Hardcoding credentials in scripts is a security risk. The **12-factor app** methodology says configuration (secrets, URLs, usernames) should come from environment variables — that way the same code runs in dev with test credentials and in production with real ones, and secrets never end up in git.
+**Why:** The current config hardcodes SQLite and a dev secret. For production (SBC deployment), you need:
+- `DATABASE_URL` from env — supports both SQLite (dev) and PostgreSQL (production)
+- `SECRET_KEY` from env — must be unique per deployment
+- `ACCESS_TOKEN_EXPIRE_MINUTES` from env — configurable per environment
+- Sensible defaults for development, but nothing hardcoded for production
 
-**Concept — Optional env vars with Pydantic Settings:**
+This also prepares you for a future vector database — PostgreSQL supports `pgvector` natively, so using it now means zero migration later.
+
+**Concept — 12-factor config with Pydantic Settings:**
 ```python
-from pydantic_settings import BaseSettings
-from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
 
 class Settings(BaseSettings):
-    ADMIN_USERNAME: Optional[str] = None  # None means "not set"
-    ADMIN_PASSWORD: Optional[str] = None
+    # Required — must be set in production
+    SECRET_KEY: str
+    DATABASE_URL: str
+    
+    # Optional — have sensible defaults
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
+    ALGORITHM: str = "HS256"
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
 ```
 
-When these are `None`, the bootstrap logic in `main.py` will simply skip seeding.
-
 **Hints for `app/config.py`:**
-- Add four new optional fields to the `Settings` class:
-  - `ADMIN_USERNAME: Optional[str] = None`
-  - `ADMIN_PASSWORD: Optional[str] = None`
-  - `ADMIN_FIRST_NAME: str = "Admin"` (has a default)
-  - `ADMIN_LAST_NAME: str = "User"` (has a default)
-- Import `Optional` from `typing` (or use `str | None` in Python 3.10+ style)
-- Also update `ACCESS_TOKEN_EXPIRE_MINUTES` to `480` (8 hours = 480 minutes) — it's currently `30`
+- **Remove** all hardcoded defaults for secrets (`SECRET_KEY`, `ADMIN_USERNAME`, etc.)
+- **Keep** `DATABASE_URL` as a string — SQLAlchemy handles the dialect switch automatically:
+  - Dev: `sqlite:///./data/jirani_library.db`
+  - Production: `postgresql://jirani:password@db:5432/jirani`
+- **Add** `SECRET_KEY` with no default — must be set via env var
+- **Add** `ACCESS_TOKEN_EXPIRE_MINUTES: int = 480` (8 hours)
+- **Add** `BASE_DIR` for file paths (upload dirs, etc.)
+- **Keep** `UPLOAD_DIR`, `COVER_DIR`, `MAX_UPLOAD_SIZE` — these are unchanged
+- **Remove** `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_FIRST_NAME`, `ADMIN_LAST_NAME` — no longer needed (replaced by `/setup` endpoint)
+
+**Database URL examples:**
+```
+# SQLite (development)
+DATABASE_URL=sqlite:///./data/jirani_library.db
+
+# PostgreSQL (production on SBC)
+DATABASE_URL=postgresql://jirani:jirani_password@localhost:5432/jirani
+```
 
 **Verify:**
 ```bash
 cd backend
-python -c "from app.config import settings; print(settings.ADMIN_USERNAME, settings.ACCESS_TOKEN_EXPIRE_MINUTES)"
-# Should print: None 480
+# Should fail without SECRET_KEY
+python -c "from app.config import settings"
+# → ValidationError: SECRET_KEY field required
+
+# Should work with env var
+SECRET_KEY=testkey DATABASE_URL=sqlite:///./test.db python -c "from app.config import settings; print(settings.DATABASE_URL)"
+# → sqlite:///./test.db
 ```
 
-- [ ] Update `app/config.py`
-- [ ] Verify output above
-- [ ] Commit: `git commit -m "config: add admin bootstrap env vars and 8h token expiry"`
+- [ ] Rewrite `app/config.py`
+- [ ] Verify: fails without SECRET_KEY, works with env vars
+- [ ] Commit: `git commit -m "config: rewrite with best-practice env vars, PostgreSQL-ready"`
 
 ---
 
-## Task 13: Add startup admin seeding to `main.py`
+## Task 13: Create `/setup` endpoint (one-time admin credential generation)
 
-**Why:** The lifespan context manager in FastAPI is the right place for startup logic — things that must run once when the app boots. Seeding the first admin here means you don't need a separate script, and Docker deployments just need the right env vars.
+**Why:** The SBC runs headless — no screen, no keyboard. The teacher plugs it in, connects their phone to the network, and opens `http://<sbc-ip>/setup` in their browser. The page generates a unique admin password, saves it to disk, and shows it **exactly once**. If they miss it, they need physical access to the device to recover.
 
-**Concept — FastAPI lifespan:**
-```python
-from contextlib import asynccontextmanager
+This replaces the env-var bootstrap approach entirely. No `ADMIN_USERNAME` or `ADMIN_PASSWORD` env vars needed.
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # --- STARTUP: runs once when app starts ---
-    do_startup_things()
-    yield
-    # --- SHUTDOWN: runs once when app stops ---
-    do_cleanup_things()
+**Concept — One-time credential generation:**
+```
+First visit to /setup:
+  1. Check if credentials file exists → no
+  2. Generate random password (secrets.token_urlsafe(8))
+  3. Save to /app/data/.credentials
+  4. Create /app/data/.credentials_revealed flag
+  5. Show password on HTML page
 
-app = FastAPI(lifespan=lifespan)
+Second visit to /setup:
+  1. Check .credentials_revealed flag → exists
+  2. Return 403 "Already configured"
 ```
 
-**Hints for `app/main.py`:**
-- Inside the `lifespan` function, after `Base.metadata.create_all(bind=engine)`, add a call to a helper function `seed_admin_if_needed()`
-- Write `seed_admin_if_needed()` as a standalone function in `main.py` (or a `startup.py` file if you prefer):
-  - Get a DB session using `SessionLocal()` (not `get_db()` — that's for request contexts)
-  - Check if `settings.ADMIN_USERNAME` and `settings.ADMIN_PASSWORD` are both set — if not, return early
-  - Check if any account with `role == RoleEnum.admin` already exists in the DB — if yes, return early (don't overwrite)
-  - If no admin exists: call `AuthService.validate_credential(RoleEnum.admin, settings.ADMIN_PASSWORD)` — raise a clear error if the password is too weak
-  - Call `AuthService.create_user(db, ...)` with `role=RoleEnum.admin`
-  - Close the DB session in a `finally` block
-  - Print a success message to the console
+**Hints for `app/api/setup_router.py`:**
+- Create the file: `app/api/setup_router.py`
+- Use `secrets.token_urlsafe(8)` for the password — cryptographically secure, URL-safe
+- Store credentials in a JSON file: `/app/data/.credentials` (or `settings.DATA_DIR / ".credentials"`)
+- Use a flag file: `/app/data/.credentials_revealed` — once this exists, never show the password again
+- Return an `HTMLResponse` with the credentials displayed clearly
+- Add a simple confirmation step: "Are you a teacher? [Yes]" — just a speed bump, not real security
+- The endpoint should be `GET /setup` — no auth required (it's the first thing the teacher sees)
+
+**File paths:**
+```python
+import secrets
+import json
+from pathlib import Path
+from fastapi import APIRouter
+from fastapi.responses import HTMLResponse
+
+router = APIRouter(tags=["setup"])
+
+CREDENTIALS_FILE = Path("/app/data/.credentials")
+REVEALED_FLAG = Path("/app/data/.credentials_revealed")
+```
+
+**Note:** In development, use `settings.BASE_DIR / "data"` instead of hardcoded `/app/data`. The Docker volume mount maps `./data` to `/app/data` in production.
+
+**HTML response example:**
+```html
+<h1>Jirani Library — Admin Setup</h1>
+<p><strong>Save these credentials now. They will not be shown again.</strong></p>
+<p>Username: <code>admin</code></p>
+<p>Password: <code>xK9mP2qR</code></p>
+<hr>
+<a href="/docs">Go to API docs</a>
+```
 
 **Verify:**
-- Set env vars and start the server:
-  ```bash
-  ADMIN_USERNAME=admin ADMIN_PASSWORD=strongpassword123 uvicorn app.main:app --reload
-  ```
-- Check the console — you should see a message like "Admin account seeded"
-- Open Swagger at `http://localhost:8000/docs`, call `POST /auth/token` with those credentials — you should get a token back
-- Start the server again — the seeding should NOT run a second time (the admin already exists)
+```bash
+cd backend
+# Start the server
+uvicorn app.main:app --reload
 
-- [ ] Add `seed_admin_if_needed()` to `main.py`
-- [ ] Add call to it in the lifespan startup block
-- [ ] Verify seeding works on first boot, skips on second boot
-- [ ] Commit: `git commit -m "feat: seed first admin from env vars on startup"`
+# First visit
+curl http://localhost:8000/setup
+# → HTML with generated password
+
+# Second visit
+curl http://localhost:8000/setup
+# → 403 "Already configured"
+```
+
+- [ ] Create `app/api/setup_router.py`
+- [ ] Register the router in `app/main.py`: `app.include_router(setup_router.router)`
+- [ ] Verify: first visit shows password, second visit returns 403
+- [ ] Commit: `git commit -m "feat: add /setup endpoint for one-time admin credential generation"`
 
 ---
 
-## Task 14: Redesign `auth_router.py`
+## Task 14: Update `main.py`
+
+---
+
+## Task 14: Update `main.py`
+
+**Why:** The lifespan context manager handles startup tasks. With the `/setup` endpoint approach, `main.py` no longer needs to seed an admin — it just needs to ensure the data directory exists and register the setup router.
+
+**Hints for `app/main.py`:**
+- In the `lifespan` function, after `Base.metadata.create_all(bind=engine)`:
+  - Ensure the data directory exists: `settings.DATA_DIR.mkdir(parents=True, exist_ok=True)`
+  - **No admin seeding** — that's handled by `/setup`
+- Register the setup router: `app.include_router(setup_router.router)`
+- Keep the existing CORS middleware, static file mounting, and other routers
+
+**Add to `config.py` (if not already there):**
+```python
+DATA_DIR: Path = BASE_DIR / "data"
+```
+
+**Verify:**
+```bash
+cd backend
+uvicorn app.main:app --reload
+# Should start without errors
+# Data directory should be created automatically
+```
+
+- [ ] Update `app/main.py` — remove seeding logic, ensure data dir, register setup router
+- [ ] Verify app starts cleanly
+- [ ] Commit: `git commit -m "refactor: update main.py for /setup endpoint, remove env var seeding"`
+
+---
+
+## Task 15: Redesign `auth_router.py`
 
 **Why:** This is the biggest change — adding new endpoints, fixing bugs, and deleting the security holes. Each endpoint should do one thing: validate input, call the service, return the response.
 
@@ -722,24 +820,25 @@ Start the server and test each endpoint via Swagger UI (`http://localhost:8000/d
 
 ---
 
-## Task 15: Update `.env.example`
+## Task 16: Update `.env.example`
 
 **Why:** `.env.example` is documentation for anyone who clones this project. It tells them what environment variables the app needs, without exposing real values.
 
 - [ ] Open `.env.example`
-- [ ] Add the new variables with placeholder values and a comment explaining each:
+- [ ] Replace the old content with:
   ```
-  # Admin bootstrap — set these to seed the first admin on startup
-  # ADMIN_PASSWORD must be at least 8 characters
-  ADMIN_USERNAME=admin
-  ADMIN_PASSWORD=changeme8
-  ADMIN_FIRST_NAME=Admin
-  ADMIN_LAST_NAME=User
+  # Required — generate a unique key per deployment
+  # openssl rand -hex 32
+  SECRET_KEY=
+
+  # Database — SQLite for dev, PostgreSQL for production
+  DATABASE_URL=sqlite:///./data/jirani_library.db
+  # DATABASE_URL=postgresql://jirani:password@localhost:5432/jirani
 
   # Token expiry (minutes) — 480 = 8 hours
   ACCESS_TOKEN_EXPIRE_MINUTES=480
   ```
-- [ ] Commit: `git commit -m "docs: update .env.example with new auth env vars"`
+- [ ] Commit: `git commit -m "docs: update .env.example with new config vars"`
 
 ---
 
@@ -795,14 +894,16 @@ def test_login_success():
   Base.metadata.create_all(bind=engine)
   ```
 - Write tests for at least these cases:
-  1. `test_login_wrong_password` → 401
-  2. `test_create_student_as_admin` → 201, auto-generated 6-digit credential in response
-  3. `test_create_admin_as_teacher` → 403
-  4. `test_reset_student_password_as_teacher` → 200, new 6-digit credential in response
-  5. `test_reset_teacher_password_as_teacher` → 403 (teacher can't reset other teachers)
-  6. `test_get_users_as_teacher_only_sees_students` → 200, all returned roles are `student`
-  7. `test_student_can_change_own_password` → 200, with min 4 char password
-  8. `test_student_change_password_too_short` → 422 (password < 4 chars)
+  1. `test_setup_first_visit_generates_credentials` → 200, password in HTML
+  2. `test_setup_second_visit_returns_403` → 403
+  3. `test_login_wrong_password` → 401
+  4. `test_create_student_as_admin` → 201, auto-generated 6-digit credential in response
+  5. `test_create_admin_as_teacher` → 403
+  6. `test_reset_student_password_as_teacher` → 200, new 6-digit credential in response
+  7. `test_reset_teacher_password_as_teacher` → 403 (teacher can't reset other teachers)
+  8. `test_get_users_as_teacher_only_sees_students` → 200, all returned roles are `student`
+  9. `test_student_can_change_own_password` → 200, with min 4 char password
+  10. `test_student_change_password_too_short` → 422 (password < 4 chars)
 
 **Run tests:**
 ```bash
