@@ -43,7 +43,7 @@ Enforced as a Python `enum.Enum` and stored as a native DB enum column. No Check
 |---------|------------------------|-------------------------------|-----------------------------------|----------------|
 | student | 6-digit auto-generated | exactly 6 digits              | min 4 chars, any characters       | system (auto)  |
 | teacher | password               | 8–50 chars                    | 8–50 chars                        | admin          |
-| admin   | password               | 12–50 chars                   | 12–50 chars                       | self or admin  |
+| admin   | password               | 8–50 chars                    | 8–50 chars                        | self or admin  |
 
 When a teacher or admin creates a student account, the system **auto-generates** a 6-digit random number as the initial password. It is returned in the response so the teacher can write it down and hand it to the student.
 
@@ -133,12 +133,11 @@ Reusable `Annotated` types enforce credential rules at the schema boundary:
 
 ```python
 StudentSelfChangePassword = Annotated[str, Field(min_length=4, max_length=50)]
-TeacherPassword           = Annotated[str, Field(min_length=8, max_length=50)]
-AdminPassword             = Annotated[str, Field(min_length=12, max_length=50)]
+StaffPassword             = Annotated[str, Field(min_length=8, max_length=50)]
 UsernameStr               = Annotated[str, Field(min_length=3, max_length=50)]
 ```
 
-Student initial passwords are auto-generated (6 digits) in the service layer — no schema-level validation needed for creation. Role-specific validation for teacher/admin passwords and student self-change is enforced in the service layer.
+`StaffPassword` applies to both teachers and admins. Student initial passwords are auto-generated (6 digits) in the service layer — no schema-level validation needed for creation.
 
 ### Schema inventory
 

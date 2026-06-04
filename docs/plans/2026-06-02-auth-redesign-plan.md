@@ -302,8 +302,7 @@ class LoginRequest(BaseModel):
 - At the top of the file, define these reusable types:
   - `UsernameStr` — min 3, max 50 chars
   - `StudentSelfChangePassword` — min 4, max 50 chars (for when a student changes their own password)
-  - `TeacherPassword` — min 8, max 50 chars
-  - `AdminPassword` — min 12, max 50 chars
+  - `StaffPassword` — min 8, max 50 chars (unified for both teachers and admins)
 - Note: there is no `StudentPIN` type — student initial passwords are auto-generated in the service layer, not validated at the schema level
 - Define these schemas (replace the entire file):
   - `LoginRequest`: `username: str`, `password: str` (no strict validation at login — wrong credentials get a 401, not a 422)
@@ -398,16 +397,17 @@ The validation logic depends on the **context** (creation vs self-change):
 On account creation:
   if role is student  → auto-generate random 6-digit number (e.g. "482719")
   if role is teacher  → password length must be 8-50
-  if role is admin    → password length must be 12-50
+  if role is admin    → password length must be 8-50  ← same as teacher
 
 On self-change (change-password endpoint):
   if role is student  → password length must be 4-50 (relaxed for kids)
   if role is teacher  → password length must be 8-50
-  if role is admin    → password length must be 12-50
+  if role is admin    → password length must be 8-50  ← same as teacher
 
 On reset by teacher/admin:
   if role is student  → auto-generate new random 6-digit number
-  if role is teacher  → use the password provided in the request
+  if role is teacher  → use the password provided in the request (min 8 chars)
+  if role is admin    → use the password provided in the request (min 8 chars)
 ```
 
 This logic belongs in the service, not the router and not the schema (because it depends on two fields together — `role` + `password` — and the context of the operation).
@@ -444,9 +444,9 @@ pw = AuthService.generate_student_password()
 print(f'Auto-generated student password: {pw}')
 assert len(pw) == 6 and pw.isdigit()
 
-# Creation context - teacher password validation
-AuthService.validate_credential(RoleEnum.teacher, 'mypassword', 'create')
-AuthService.validate_credential(RoleEnum.admin, 'strongpassword1', 'create')
+# Creation context - teacher and admin password validation
+AuthService.validate_credential(RoleEnum.teacher, 'password1', 'create')
+AuthService.validate_credential(RoleEnum.admin, 'password1', 'create')
 print('valid credentials OK')
 
 # Self-change context - student can use short password
@@ -651,7 +651,7 @@ Delete the entire `seed_roles` and `make_admin` endpoint functions. They are gon
 - Fix the protection: `Depends(get_current_user)` — **any authenticated user** can change their own password (not just admin/teacher)
 - Remove the `username` field from the request — the user comes from `current_user`
 - Verify `old_password` against `current_user.hashed_password`
-- Call `AuthService.validate_credential(current_user.role, change_data.new_password, context="self_change")` to enforce role-appropriate strength rules (student: min 4 chars, teacher: 8+, admin: 12+)
+- Call `AuthService.validate_credential(current_user.role, change_data.new_password, context="self_change")` to enforce role-appropriate strength rules (student: min 4 chars, teacher/admin: 8+)
 - Hash and save the new password
 
 **Removed endpoints** — delete these functions entirely:
@@ -687,9 +687,9 @@ Start the server and test each endpoint via Swagger UI (`http://localhost:8000/d
 - [ ] Add the new variables with placeholder values and a comment explaining each:
   ```
   # Admin bootstrap — set these to seed the first admin on startup
-  # ADMIN_PASSWORD must be at least 12 characters
+  # ADMIN_PASSWORD must be at least 8 characters
   ADMIN_USERNAME=admin
-  ADMIN_PASSWORD=changeme_at_least_12_chars
+  ADMIN_PASSWORD=changeme8
   ADMIN_FIRST_NAME=Admin
   ADMIN_LAST_NAME=User
 
