@@ -11,11 +11,9 @@ class LoginRequest(BaseModel):
     password: password_str
 
 class ResetPasswordRequest(BaseModel):
-    username: username_str
-    new_password: password_str
+    account_id: int
 
 class ChangePasswordRequest(BaseModel):
-    username: username_str
     new_password: password_str
     old_password: password_str
 

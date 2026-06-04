@@ -6,7 +6,7 @@ from app.config import settings
 from app.models import Account, RoleEnum
 from app.schemas import AccountCreate
 from app.repositories import AuthRepo
-import random
+import random, secrets
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ACCESS_TOKEN_EXPIRE_MINUTES = 120
@@ -19,6 +19,10 @@ class AuthService:
     def generate_student_password() -> str:
         return str(random.randint(100000, 999999))
     
+    @staticmethod
+    def generate_teacher_password() -> str:
+        return secrets.token_urlsafe(8)
+
     @staticmethod
     def validate_credentials(role: RoleEnum, password:str, context: str = "create") -> None:
         if context == "create" and role == RoleEnum.student:
@@ -45,7 +49,6 @@ class AuthService:
     def get_password_hash(password: str) -> str:
         return pwd_context.hash(password)
 
-
     def get_user_by_username(self, username: str) -> Optional[Account]:
         return self.auth_repo.get_by_username(username)
 
@@ -64,7 +67,11 @@ class AuthService:
             raise ValueError(f"Username '{metadata.username}' is already taken.")
         if metadata.role == RoleEnum.student and not metadata.password:
             password = self.generate_student_password()
-            
+        elif metadata.role == RoleEnum.teacher and not metadata.password:
+            password = self.generate_teacher_password()
+        else:
+            password = metadata.password
+
         hashed_password = self.get_password_hash(password)
         new_account = Account(
             username=metadata.username,
@@ -76,6 +83,14 @@ class AuthService:
         self.auth_repo.create_account(new_account)
         return new_account
 
+    def change_password(self, username: str, new_password: str) -> Account:
+        user = self.get_user_by_username(username)
+        if not user:
+            raise ValueError(f"User '{username}' not found.")
+        user.hashed_password = self.get_password_hash(new_password)
+        self.auth_repo.change_password(user, user.hashed_password)
+        return user
+    
     @staticmethod
     def create_access_token(data: dict) -> str:
         to_encode = data.copy()
@@ -91,3 +106,32 @@ class AuthService:
             "role": account.role.value
         }
         return AuthService.create_access_token(token_data)
+    
+    def reset_student_password(self, account_id: int) -> Account:
+        user = self.auth_repo.get_by_id(account_id)
+        if not user:
+            raise ValueError(f"User with ID '{account_id}' not found.")
+        if user.role != RoleEnum.student and user.role != RoleEnum.teacher:
+            raise ValueError("Password reset is only allowed for students or teachers accounts.")
+        if user.role == RoleEnum.student:
+            hashed_password = self.get_password_hash(self.generate_student_password())
+        elif user.role == RoleEnum.teacher:
+            hashed_password = self.get_password_hash(self.generate_teacher_password())
+        user.hashed_password = hashed_password
+        self.auth_repo.change_password(user, user.hashed_password)
+        return user
+    
+    def setup_admin_account(self, password: str) -> Account:
+        admin_user = self.get_user_by_username("admin")
+        if admin_user:
+            raise ValueError("Admin account already exists.")
+        hashed_password = self.get_password_hash(password)
+        new_admin = Account(
+            username="admin",
+            hashed_password=hashed_password,
+            role=RoleEnum.admin,
+            first_name="Admin",
+            last_name="User"
+        )
+        self.auth_repo.create_account(new_admin)
+        return new_admin
