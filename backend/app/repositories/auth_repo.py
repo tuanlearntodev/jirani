@@ -1,0 +1,25 @@
+from sqlalchemy.orm import Session
+from app.models import Account, RoleEnum
+from typing import Optional
+
+class AuthRepo:
+    def __init__(self, db_session: Session):
+        self.db_session = db_session
+
+    def get_by_username(self, username: str) -> Optional[Account]:
+        return self.db_session.query(Account).filter(Account.username == username).first()
+      
+    def create_account(self, account: Account) -> Account:
+        self.db_session.add(account)
+        self.db_session.commit()
+        self.db_session.refresh(account)
+        return account
+      
+    def list_all(self, role: Optional[RoleEnum] = None) -> list[Account]:
+        query = self.db_session.query(Account)
+        if role is not None:
+            query = query.filter(Account.role == role)
+        return query.all()
+      
+    def has_admin(self) -> bool:
+        return self.db_session.query(Account).filter(Account.role == RoleEnum.admin).first() is not None

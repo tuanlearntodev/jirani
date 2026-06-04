@@ -10,6 +10,7 @@ dependencies = [
     "fastapi>=0.118.0",
     "passlib>=1.7.4",
     "psycopg2-binary>=2.9.10",
+    "pydantic>=2.13.4",
     "pydantic-settings>=2.11.0",
     "pymupdf>=1.26.7",
     "python-jose[cryptography]>=3.5.0",
