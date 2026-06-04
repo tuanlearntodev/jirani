@@ -1,8 +1,19 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 from typing import Set
+import secrets
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+SECRET_FILE = DATA_DIR / ".secret"
+
+def get_secret_key() -> str:
+    SECRET_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if SECRET_FILE.exists():
+        return SECRET_FILE.read_text().strip()
+    key = secrets.token_urlsafe(32)
+    SECRET_FILE.write_text(key)
+    return key
 
 class Settings(BaseSettings):
     # App metadata
@@ -17,17 +28,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./data/jirani_library.db"
     
     # Security settings
-    SECRET_KEY: str = "dev-secret-change-in-production"
+    SECRET_KEY: str = get_secret_key()
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
-    # CORS settings
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
-    CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: list[str] = ["*"]
-    CORS_ALLOW_HEADERS: list[str] = ["*"]
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     
     # File upload settings
+    DATA_DIR: Path = BASE_DIR / "data"
     UPLOAD_DIR: Path = BASE_DIR / "uploads" / "books"
     COVER_DIR: Path = BASE_DIR / "uploads" / "covers"
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
@@ -42,9 +48,13 @@ class Settings(BaseSettings):
         return {"jpg", "jpeg", "png", "webp"}
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
         case_sensitive=True
     )
+    
+    def __init__(self, **kwargs):
+      super().__init__(**kwargs)
+      if not self.SECRET_KEY:
+          self.SECRET_KEY = get_secret_key()
+
 
 settings = Settings()
