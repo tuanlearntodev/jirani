@@ -32,3 +32,12 @@ class AuthRepo:
         self.db_session.commit()
         self.db_session.refresh(account)
         return account
+    
+    def get_next_prefix_number(self, prefix: str) -> int:
+        accounts = self.db_session.query(Account).filter(Account.username.like(f"{prefix}%")).all()
+        numbers = []
+        for account in accounts:
+            suffix = account.username.removeprefix(prefix)
+            if suffix.isdigit():
+                numbers.append(int(suffix))
+        return max(numbers) + 1 if numbers else 1
