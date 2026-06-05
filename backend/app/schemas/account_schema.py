@@ -8,7 +8,6 @@ class AccountBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=50)
     
 class AccountCreate(AccountBase):
-    password: str = Field(..., min_length=4, max_length=50) 
     role: RoleEnum
     
 class AccountRead(AccountBase):
@@ -21,3 +20,19 @@ class AccountRead(AccountBase):
     
 class CreateUserResponse(AccountRead):
     credentials: str | None = None
+
+class BulkCreateRequest(BaseModel):
+    count: int = Field(..., ge=1, le=100)
+    role: RoleEnum
+    prefix: str = Field(default="student", min_length=1, max_length=20)
+    first_name: str = Field(default="Student", min_length=1, max_length=50)
+    last_name: str = Field(default="Account", min_length=1, max_length=50)
+
+class BulkCredentialItem(BaseModel):
+    username: str
+    password: str
+    role: RoleEnum
+
+class BulkCreateResponse(BaseModel):
+    created: int
+    accounts: list[BulkCredentialItem]

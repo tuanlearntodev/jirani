@@ -15,3 +15,4 @@ class Account(TimestampMixin, Base):
     first_name: Mapped[str] = mapped_column(String(50), nullable=False)
     last_name: Mapped[str] = mapped_column(String(50), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True)
+    first_login: Mapped[bool] = mapped_column(default=True, server_default="true")
