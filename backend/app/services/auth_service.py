@@ -4,7 +4,7 @@ from jose import jwt
 from passlib.context import CryptContext
 from app.config import settings
 from app.models import Account, RoleEnum
-from app.schemas import AccountCreate
+from app.schemas import AccountCreate, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse
 from app.repositories import AuthRepo
 import random, secrets
 
@@ -61,16 +61,18 @@ class AuthService:
             return None
         return account
 
-    def create_user(self, metadata: AccountCreate) -> Account:
+    def create_user(self, metadata: AccountCreate) -> tuple[Account, str]:
         existing_user = self.get_user_by_username(metadata.username)
         if existing_user:
             raise ValueError(f"Username '{metadata.username}' is already taken.")
-        if metadata.role == RoleEnum.student and not metadata.password:
+        if metadata.role == RoleEnum.student:
             password = self.generate_student_password()
-        elif metadata.role == RoleEnum.teacher and not metadata.password:
+            first_login = False
+        elif metadata.role == RoleEnum.teacher:
             password = self.generate_teacher_password()
+            first_login = True
         else:
-            password = metadata.password
+            raise ValueError("Only student and teacher accounts can be created via this endpoint.")
 
         hashed_password = self.get_password_hash(password)
         new_account = Account(
@@ -78,10 +80,11 @@ class AuthService:
             hashed_password=hashed_password,
             role=metadata.role,
             first_name=metadata.first_name,
-            last_name=metadata.last_name
+            last_name=metadata.last_name,
+            first_login=first_login
         )
         self.auth_repo.create_account(new_account)
-        return new_account
+        return new_account, password
 
     def change_password(self, username: str, new_password: str) -> Account:
         user = self.get_user_by_username(username)
@@ -107,19 +110,21 @@ class AuthService:
         }
         return AuthService.create_access_token(token_data)
     
-    def reset_student_password(self, account_id: int) -> Account:
+    def reset_password(self, account_id: int) -> tuple[Account, str]:
         user = self.auth_repo.get_by_id(account_id)
         if not user:
             raise ValueError(f"User with ID '{account_id}' not found.")
         if user.role != RoleEnum.student and user.role != RoleEnum.teacher:
             raise ValueError("Password reset is only allowed for students or teachers accounts.")
         if user.role == RoleEnum.student:
-            hashed_password = self.get_password_hash(self.generate_student_password())
+            password = self.generate_student_password()
+            hashed_password = self.get_password_hash(password)
         elif user.role == RoleEnum.teacher:
-            hashed_password = self.get_password_hash(self.generate_teacher_password())
+            password = self.generate_teacher_password()
+            hashed_password = self.get_password_hash(password)
         user.hashed_password = hashed_password
         self.auth_repo.change_password(user, user.hashed_password)
-        return user
+        return user, password
     
     def setup_admin_account(self, password: str) -> Account:
         admin_user = self.get_user_by_username("admin")
@@ -135,3 +140,37 @@ class AuthService:
         )
         self.auth_repo.create_account(new_admin)
         return new_admin
+    
+    def bulk_create_users(self, bulk_data: BulkCreateRequest) -> BulkCreateResponse:
+        if bulk_data.role == RoleEnum.admin:
+            raise ValueError("Cannot create admin accounts via bulk endpoint")
+        
+        created_accounts = []
+        number = self.auth_repo.get_next_prefix_number(bulk_data.prefix)
+        
+        for i in range(bulk_data.count):
+            username = f"{bulk_data.prefix}{number}"
+            number +=1
+            if self.get_user_by_username(username):
+                continue
+            
+            if bulk_data.role == RoleEnum.student:
+                password = self.generate_student_password()
+                first_login = False
+            elif bulk_data.role == RoleEnum.teacher:
+                password = self.generate_teacher_password()
+                first_login = True
+            else:
+                raise ValueError("Bulk creation is only allowed for students or teachers.")
+            hashed_password = self.get_password_hash(password)
+            new_account = Account(
+                username=username,
+                hashed_password=hashed_password,
+                role=bulk_data.role,
+                first_name=bulk_data.first_name,
+                last_name=bulk_data.last_name, 
+                first_login=first_login
+            )
+            self.auth_repo.create_account(new_account)
+            created_accounts.append(BulkCredentialItem(username=username, password=password, role=bulk_data.role))
+        return BulkCreateResponse(created=len(created_accounts), accounts=created_accounts)
