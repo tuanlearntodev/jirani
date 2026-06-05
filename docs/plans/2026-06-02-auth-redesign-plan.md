@@ -53,13 +53,13 @@ In a real production app, you would use **Alembic** to write migration scripts t
 | `app/dependencies/auth.py` | **Update** | Simplify `RoleChecker` for single-role model |
 | `app/config.py` | **Rewrite** | Best-practice config: DATABASE_URL, SECRET_KEY from env, PostgreSQL-ready |
 | `app/main.py` | **Update** | Startup: ensure upload dirs, no env var seeding |
-| `app/api/auth_router.py` | **Rewrite** | Remove holes, add new endpoints |
-| `app/api/setup_router.py` | **Create** | `/setup` endpoint — one-time admin credential generation |
+| `app/api/auth_router.py` | **Rewrite** | Remove holes, add new endpoints including bulk creation |
 | `app/api/setup_router.py` | **Create** | `/setup` endpoint — one-time admin credential generation |
 | `app/scripts/create_admin.py` | **Delete** | Replaced by `/setup` endpoint |
 | `app/scripts/create_test_users.py` | **Delete** | Replaced by `POST /auth/users` |
-| `.env.example` | **Update** | Document DATABASE_URL, SECRET_KEY, and other config |
+| `.env.example` | **Delete** | App is zero-config |
 | `app/tests/test_auth.py` | **Create** | Tests for new auth endpoints |
+| `app/tests/conftest.py` | **Create** | In-memory DB fixture for tests |
 
 ---
 
@@ -739,229 +739,183 @@ uvicorn app.main:app --reload
 
 ---
 
-## Task 15: Redesign `auth_router.py`
+## Task 15: Add bulk creation schemas
 
-**Why:** This is the biggest change — adding new endpoints, fixing bugs, and deleting the security holes. Each endpoint should do one thing: validate input, call the service, return the response.
+**Why:** Teachers need to create many student accounts at once. A bulk endpoint requires new request/response schemas that describe how many accounts to create, what role they should have, and what usernames to generate. The response must include every generated password so the teacher can distribute them.
 
-**Current state:** Your `auth_router.py` has 3 endpoints (`/token`, `/reset-student-password`, `/change-password`). You need to add `/users`, `/users/bulk`, `/users` (GET), and `/me`.
-
-### Step 15.1: Add bulk creation schemas to `account_schema.py`
-
-**File:** `backend/app/schemas/account_schema.py`
-
-Add these three new classes at the bottom of the file:
-
+**Concept — Pydantic validation constraints:**
 ```python
-class BulkCreateRequest(BaseModel):
-    count: int = Field(..., ge=1, le=100)
-    role: RoleEnum
-    prefix: str = Field(default="student", min_length=1, max_length=20)
-    first_name: str = Field(default="Student", min_length=1, max_length=50)
-    last_name: str = Field(default="Account", min_length=1, max_length=50)
+from pydantic import Field
 
-class BulkCredentialItem(BaseModel):
-    username: str
-    password: str
-    role: RoleEnum
+# Field() accepts validation constraints
+count: int = Field(..., ge=1, le=100)  # required, 1 <= count <= 100
+prefix: str = Field(default="student", min_length=1, max_length=20)
+```
+Pydantic automatically rejects requests that violate these constraints and returns a 422 error with a clear message.
 
-class BulkCreateResponse(BaseModel):
-    created: int
-    accounts: list[BulkCredentialItem]
+**Hints:**
+- Open `app/schemas/account_schema.py`
+- Add `password: str | None = None` to `AccountCreate` — it's missing and the service needs it
+- Add three new classes at the bottom:
+  - `BulkCreateRequest` — fields: `count` (1-100), `role`, `prefix` (default "student"), `first_name`, `last_name`
+  - `BulkCredentialItem` — fields: `username`, `password`, `role` (one item in the response list)
+  - `BulkCreateResponse` — fields: `created` (int), `accounts` (list of `BulkCredentialItem`)
+- Then open `app/schemas/__init__.py` and add the three new classes to the import and `__all__`
+
+**Verify:**
+```bash
+cd backend
+python -c "from app.schemas import BulkCreateRequest, BulkCreateResponse; print('OK')"
 ```
 
-Also add `password: str | None = None` to `AccountCreate` — it's missing and the service expects it.
+- [ ] Add `password: str | None = None` to `AccountCreate`
+- [ ] Add `BulkCreateRequest`, `BulkCredentialItem`, `BulkCreateResponse` to `account_schema.py`
+- [ ] Export new schemas from `schemas/__init__.py`
+- [ ] Verify no import errors
+- [ ] Commit: `git commit -m "feat: add bulk creation schemas"`
 
-### Step 15.2: Export new schemas from `__init__.py`
+---
 
-**File:** `backend/app/schemas/__init__.py`
+## Task 16: Add `get_next_prefix_number()` to `AuthRepo`
 
-- Add `BulkCreateRequest`, `BulkCreateResponse`, `BulkCredentialItem` to the import from `.account_schema`
-- Add them to `__all__`
+**Why:** Bulk usernames follow a pattern like `student001`, `student002`, etc. To avoid collisions, the service needs to know what number to start from. The repo queries the database for existing usernames matching a prefix and finds the highest number used.
 
-### Step 15.3: Add `get_next_prefix_number()` to `AuthRepo`
-
-**File:** `backend/app/repositories/auth_repo.py`
-
-Add a new method that finds the next available sequential number for a given username prefix:
-
+**Concept — String parsing in Python:**
 ```python
-def get_next_prefix_number(self, prefix: str) -> int:
-    # Query all accounts where username starts with the prefix
-    # Extract the numeric suffix, find the max, return max + 1
-    # If no matches, return 1
-    # Hint: use LIKE 'prefix%' and parse the number from username
+username = "student042"
+prefix = "student"
+number_str = username.removeprefix(prefix)  # "042"
+number = int(number_str)                     # 42
+```
+The `removeprefix()` method (Python 3.9+) strips the prefix cleanly. Wrap the result in `int()` to get the number.
+
+**Hints:**
+- Open `app/repositories/auth_repo.py`
+- Add a method `get_next_prefix_number(self, prefix: str) -> int`
+- Query: `self.db_session.query(Account).filter(Account.username.like(f"{prefix}%")).all()`
+- For each account, strip the prefix from `username`, parse the remaining digits with `int()`
+- Return `max(numbers) + 1` if any matches exist, otherwise return `1`
+- Handle edge cases: usernames that match the prefix but have no number after them (skip those)
+
+**Verify:**
+```bash
+cd backend
+python -c "from app.repositories import AuthRepo; print('OK')"
 ```
 
-**Hint:** Use `self.db_session.query(Account).filter(Account.username.like(f"{prefix}%")).all()`, then for each account, strip the prefix and parse the remaining digits. Return `max_number + 1` or `1` if no matches.
+- [ ] Add `get_next_prefix_number()` to `AuthRepo`
+- [ ] Verify no import errors
+- [ ] Commit: `git commit -m "feat: add get_next_prefix_number to AuthRepo"`
 
-### Step 15.4: Add `bulk_create_users()` to `AuthService`
+---
 
-**File:** `backend/app/services/auth_service.py`
+## Task 17: Add `bulk_create_users()` to `AuthService`
 
-Add a new method:
+**Why:** The service orchestrates bulk account creation: validate the request (no admin role), generate usernames sequentially, generate role-appropriate passwords, create each account in the database, and collect all credentials for the response.
 
+**Concept — Returning multiple values from a method:**
 ```python
-def bulk_create_users(self, bulk_data: BulkCreateRequest) -> BulkCreateResponse:
-    # 1. Validate: no admin role allowed
-    # 2. Get starting number from repo: self.auth_repo.get_next_prefix_number(bulk_data.prefix)
-    # 3. Loop `bulk_data.count` times:
-    #    - Generate username: f"{bulk_data.prefix}{number:03d}"
-    #    - Generate password (student: 6-digit PIN, teacher: token_urlsafe(8))
-    #    - Create Account with username, hashed_password, role, first_name, last_name
-    #    - Add to session, commit, refresh
-    #    - Collect {username, password, role} in a list
-    #    - Increment number
-    # 4. Return BulkCreateResponse(created=count, accounts=credentials_list)
+def create_user(self, metadata: AccountCreate) -> tuple[Account, str]:
+    # ... create the account ...
+    return new_account, raw_password  # tuple unpacking
+```
+The caller unpacks: `account, password = service.create_user(data)`. This is Python's idiomatic way to return multiple related values.
+
+**Hints:**
+- Open `app/services/auth_service.py`
+- Add `bulk_create_users(self, bulk_data: BulkCreateRequest) -> BulkCreateResponse`
+- Step 1: Reject admin role — `if bulk_data.role == RoleEnum.admin: raise ValueError(...)`
+- Step 2: Get starting number — `number = self.auth_repo.get_next_prefix_number(bulk_data.prefix)`
+- Step 3: Loop `bulk_data.count` times:
+  - Generate username: `f"{bulk_data.prefix}{number:03d}"`
+  - Check if username already exists (skip if so, increment number, continue)
+  - Generate password: `generate_student_password()` or `generate_teacher_password()` based on role
+  - Create `Account` with username, hashed password, role, first_name, last_name
+  - Add to session, commit, refresh
+  - Append `{username, password, role}` to a credentials list
+  - Increment number
+- Step 4: Return `BulkCreateResponse(created=len(credentials), accounts=credentials)`
+- Also modify `create_user()` to return `tuple[Account, str]` instead of just `Account`
+- Also modify `reset_student_password()` to return `tuple[Account, str]`
+
+**Verify:**
+```bash
+cd backend
+python -c "from app.services import AuthService; print('OK')"
 ```
 
-**Hint:** Handle username collisions by catching `IntegrityError` or checking `get_user_by_username()` before each creation. If collision occurs, skip and increment number, continue.
+- [ ] Add `bulk_create_users()` to `AuthService`
+- [ ] Change `create_user()` return type to `tuple[Account, str]`
+- [ ] Change `reset_student_password()` return type to `tuple[Account, str]`
+- [ ] Verify no import errors
+- [ ] Commit: `git commit -m "feat: add bulk_create_users to AuthService"`
 
-### Step 15.5: Rewrite `auth_router.py`
+---
 
-**File:** `backend/app/api/auth_router.py`
+## Task 18: Redesign `auth_router.py`
 
-Replace the entire file with these endpoints:
+**Why:** This is the router rewrite — adding new endpoints, fixing bugs, and removing security holes. Each endpoint should do one thing: validate input, call the service, return the response. Your current router has 3 endpoints (`/token`, `/reset-student-password`, `/change-password`). You'll expand to 7.
 
-#### `POST /auth/token` (login) — keep as-is, no changes needed
-
-#### `POST /auth/users` (create single user — new)
-
+**Concept — FastAPI endpoint pattern:**
 ```python
-@router.post("/users", response_model=CreateUserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(
-    account_data: AccountCreate,
-    auth_service: AuthService = Depends(get_auth_service),
-    current_user: Account = Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher]))
+@router.post("/endpoint", response_model=SomeResponse, status_code=status.HTTP_201_CREATED)
+async def some_endpoint(
+    data: SomeRequest,                          # request body
+    auth_service: AuthService = Depends(get_auth_service),  # service layer
+    current_user: Account = Depends(RoleChecker([RoleEnum.admin]))  # auth guard
 ):
-    # Role restriction: teachers can only create students
-    if current_user.role == RoleEnum.teacher and account_data.role != RoleEnum.student:
-        raise HTTPException(status_code=403, detail="Teachers can only create student accounts")
-    
-    try:
-        created_user = auth_service.create_user(account_data)
-        # Return with the raw password that was generated/provided
-        # Hint: create_user returns the Account, but you need the plain password
-        # You'll need to modify create_user to return (Account, raw_password) tuple
-        # Or add a field to Account temporarily (not recommended)
-        # Best: modify create_user to return a dict or tuple
-        return CreateUserResponse(..., credentials=raw_password)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # 1. Validate (role restrictions, business rules)
+    # 2. Call service (may raise ValueError)
+    # 3. Return response
 ```
+The pattern is consistent: guard → validate → call service → return. If the service raises `ValueError`, catch it and convert to `HTTPException(400, ...)`.
 
-**Important:** You need to modify `AuthService.create_user()` to return the raw password along with the account. Change the return type to `tuple[Account, str]` or create a small dataclass. The router needs the plain password to include in the response.
+**Hints for each endpoint:**
 
-#### `POST /auth/users/bulk` (mass create — new)
+### `POST /auth/token` (login) — keep as-is
+No changes needed. It already works correctly.
 
-```python
-@router.post("/users/bulk", response_model=BulkCreateResponse, status_code=status.HTTP_201_CREATED)
-async def bulk_create_users(
-    bulk_data: BulkCreateRequest,
-    auth_service: AuthService = Depends(get_auth_service),
-    current_user: Account = Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher]))
-):
-    # No admin creation
-    if bulk_data.role == RoleEnum.admin:
-        raise HTTPException(status_code=400, detail="Cannot create admin accounts via bulk endpoint")
-    
-    # Teacher restriction
-    if current_user.role == RoleEnum.teacher and bulk_data.role != RoleEnum.student:
-        raise HTTPException(status_code=403, detail="Teachers can only create student accounts")
-    
-    return auth_service.bulk_create_users(bulk_data)
-```
+### `POST /auth/users` (create single user — new)
+- Protect with `RoleChecker([RoleEnum.admin, RoleEnum.teacher])`
+- If teacher tries to create non-student → 403
+- Call `auth_service.create_user(account_data)` — unpack the tuple: `account, raw_password = ...`
+- Catch `ValueError` → `HTTPException(400, ...)`
+- Return `CreateUserResponse.model_validate({...**, "credentials": raw_password})`
 
-#### `GET /auth/users` (list users — new)
+### `POST /auth/users/bulk` (mass create — new)
+- Protect with `RoleChecker([RoleEnum.admin, RoleEnum.teacher])`
+- If role is admin → 400 "Cannot create admin accounts via bulk endpoint"
+- If teacher tries to create non-student → 403
+- Call `auth_service.bulk_create_users(bulk_data)` — returns `BulkCreateResponse` directly
+- Return the response
 
-```python
-@router.get("/users", response_model=list[AccountRead], status_code=status.HTTP_200_OK)
-async def list_users(
-    auth_service: AuthService = Depends(get_auth_service),
-    current_user: Account = Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher]))
-):
-    # Teachers only see students, admins see everyone
-    if current_user.role == RoleEnum.teacher:
-        return auth_service.auth_repo.list_all(role=RoleEnum.student)
-    return auth_service.auth_repo.list_all()
-```
+### `GET /auth/users` (list users — new)
+- Protect with `RoleChecker([RoleEnum.admin, RoleEnum.teacher])`
+- If teacher → `auth_service.auth_repo.list_all(role=RoleEnum.student)`
+- If admin → `auth_service.auth_repo.list_all()`
+- Return `list[AccountRead]`
 
-#### `GET /auth/me` (current user — new)
+### `GET /auth/me` (current user — new)
+- Protect with `get_current_user` (any authenticated user)
+- Return `AccountRead.model_validate(current_user)`
 
-```python
-@router.get("/me", response_model=AccountRead, status_code=status.HTTP_200_OK)
-async def get_me(
-    current_user: Account = Depends(get_current_user)
-):
-    return AccountRead.model_validate(current_user)
-```
+### `POST /auth/reset-password` (rename from `/reset-student-password`)
+- Rename the route to `/reset-password`
+- Protect with `RoleChecker([RoleEnum.admin, RoleEnum.teacher])`
+- Look up target user by `account_id` → 404 if not found
+- If teacher and target is not student → 403
+- Call `auth_service.reset_student_password(account_id)` — unpack tuple: `account, new_password = ...`
+- Return `{"message": f"Password reset for {account.username}", "new_password": new_password}`
 
-#### `POST /auth/reset-student-password` (rename and fix)
+### `POST /auth/change-password` (fix)
+- Change protection to `get_current_user` (any authenticated user, not just admin/teacher)
+- Verify old password → 400 if incorrect
+- Call `AuthService.validate_credentials(current_user.role, new_password, context="self_change")` — catch `ValueError` → 400
+- Call `auth_service.change_password(current_user.username, new_password)`
+- Return success message
 
-Rename to `/reset-password`. Update the logic:
-
-```python
-@router.post("/reset-password", status_code=status.HTTP_200_OK)
-async def reset_password(
-    reset_data: ResetPasswordRequest,
-    auth_service: AuthService = Depends(get_auth_service),
-    current_user: Account = Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher]))
-):
-    # Get target user by account_id
-    target_user = auth_service.auth_repo.get_by_id(reset_data.account_id)
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Teacher restriction: can only reset student passwords
-    if current_user.role == RoleEnum.teacher and target_user.role != RoleEnum.student:
-        raise HTTPException(status_code=403, detail="Teachers can only reset student PINs")
-    
-    # Reset and return new password
-    updated = auth_service.reset_student_password(reset_data.account_id)
-    # You need to return the new plain password
-    # Modify reset_student_password to return (Account, new_password) tuple
-    return {"message": f"Password reset for {updated.username}", "new_password": new_password}
-```
-
-**Important:** Like `create_user`, `reset_student_password` needs to return the new plain password. Modify it to return `tuple[Account, str]`.
-
-#### `POST /auth/change-password` (fix)
-
-Keep as-is but add validation:
-
-```python
-@router.post("/change-password", status_code=status.HTTP_200_OK)
-async def change_password(
-    change_data: ChangePasswordRequest,
-    auth_service: AuthService = Depends(get_auth_service),
-    current_user: Account = Depends(get_current_user)
-):
-    if not auth_service.verify_password(change_data.old_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect current password")
-    
-    # Validate new password meets role requirements
-    try:
-        AuthService.validate_credentials(current_user.role, change_data.new_password, context="self_change")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-    auth_service.change_password(current_user.username, change_data.new_password)
-    return {"message": "Password changed successfully"}
-```
-
-### Step 15.6: Modify `AuthService.create_user()` and `reset_student_password()` to return raw passwords
-
-**File:** `backend/app/services/auth_service.py`
-
-Change `create_user()` return type from `Account` to `tuple[Account, str]`. The second element is the plain password.
-
-Change `reset_student_password()` return type from `Account` to `tuple[Account, str]`. The second element is the new plain password.
-
-Update the callers in `auth_router.py` to unpack the tuple.
-
-### Step 15.7: Verify manually via Swagger
-
-Start the server and test each endpoint:
-
+**Verify:**
+Start the server and test each endpoint via Swagger UI (`http://localhost:8000/docs`):
 1. `GET /setup` → get admin credentials
 2. `POST /auth/token` → login as admin, get token
 3. `POST /auth/users` → create a teacher account → response includes raw password
@@ -973,18 +927,13 @@ Start the server and test each endpoint:
 9. `POST /auth/change-password` as student → change to 4+ digit PIN
 10. `POST /auth/reset-password` as teacher → reset student PIN → returns new 6-digit PIN
 
-- [ ] Add `BulkCreateRequest`, `BulkCredentialItem`, `BulkCreateResponse` to `account_schema.py`
-- [ ] Export new schemas from `schemas/__init__.py`
-- [ ] Add `get_next_prefix_number()` to `AuthRepo`
-- [ ] Add `bulk_create_users()` to `AuthService`
-- [ ] Modify `create_user()` and `reset_student_password()` to return `(Account, raw_password)` tuples
 - [ ] Rewrite `auth_router.py` with all 7 endpoints
 - [ ] Test each endpoint via Swagger UI
 - [ ] Commit: `git commit -m "feat: redesign auth router with bulk creation and security fixes"`
 
 ---
 
-## Task 16: Delete `.env.example` (no longer needed)
+## Task 19: Delete `.env.example` (no longer needed)
 
 **Why:** The app is zero-config — no `.env` file required. All secrets are auto-generated. The `.env.example` file is misleading because it implies the user needs to configure something.
 
@@ -993,7 +942,7 @@ Start the server and test each endpoint:
 
 ---
 
-## Task 17: Delete old scripts
+## Task 20: Delete old scripts
 
 **Why:** The old scripts create users by directly manipulating the DB, bypassing all validation. The new `POST /auth/users` endpoint replaces them. Keeping dead scripts causes confusion.
 
@@ -1004,7 +953,7 @@ Start the server and test each endpoint:
 
 ---
 
-## Task 18: Write tests
+## Task 21: Write tests
 
 **Why:** Tests prove the system works as designed and protect you from breaking it when you make future changes. FastAPI has a built-in test client (`TestClient`) that lets you make HTTP requests to your app without running a real server.
 
@@ -1021,29 +970,31 @@ def test_login_success():
     assert "access_token" in response.json()
 ```
 
+**Concept — In-memory SQLite for tests:**
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.database import Base, get_db
+from app.main import app
+
+TEST_DATABASE_URL = "sqlite:///:memory:"
+engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TestingSessionLocal = sessionmaker(bind=engine)
+
+def override_get_db():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+app.dependency_overrides[get_db] = override_get_db
+Base.metadata.create_all(bind=engine)
+```
+This replaces the real database with a fresh in-memory one for each test run. Tests are fast and don't touch your real data.
+
 **Hints for `app/tests/test_auth.py`:**
-- Use an **in-memory SQLite** database for tests so tests don't touch your real DB:
-  ```python
-  # In a conftest.py or at the top of the test file
-  from sqlalchemy import create_engine
-  from sqlalchemy.orm import sessionmaker
-  from app.database import Base, get_db
-  from app.main import app
-
-  TEST_DATABASE_URL = "sqlite:///:memory:"
-  engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-  TestingSessionLocal = sessionmaker(bind=engine)
-
-  def override_get_db():
-      db = TestingSessionLocal()
-      try:
-          yield db
-      finally:
-          db.close()
-
-  app.dependency_overrides[get_db] = override_get_db
-  Base.metadata.create_all(bind=engine)
-  ```
+- Create a `conftest.py` in `app/tests/` with the in-memory DB setup
 - Write tests for at least these cases:
   1. `test_setup_first_visit_generates_credentials` → 200, password in response
   2. `test_setup_second_visit_returns_403` → 403
@@ -1053,7 +1004,7 @@ def test_login_success():
   6. `test_bulk_create_students` → 200, returns list of usernames + passwords
   7. `test_bulk_create_as_teacher_only_students` → 200 for students, 403 for teachers
   8. `test_bulk_create_no_admin` → 400 when requesting admin role
-  9. `test_reset_student_password_as_teacher` → 200, new 6-digit credential in response
+  9. `test_reset_password_as_teacher` → 200, new 6-digit credential in response
   10. `test_reset_teacher_password_as_teacher` → 403 (teacher can't reset other teachers)
   11. `test_get_users_as_teacher_only_sees_students` → 200, all returned roles are `student`
   12. `test_student_can_change_own_password` → 200, with min 4 char password
@@ -1065,7 +1016,8 @@ cd backend
 pytest app/tests/test_auth.py -v
 ```
 
-- [ ] Create `app/tests/test_auth.py`
+- [ ] Create `app/tests/conftest.py` with in-memory DB fixture
+- [ ] Create `app/tests/test_auth.py` with test cases
 - [ ] Run tests and make them all pass
 - [ ] Commit: `git commit -m "test: add auth endpoint tests"`
 
