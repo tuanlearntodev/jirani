@@ -1,252 +1,292 @@
 {
-  "D:\\jirani_offline_library_backend\\package.json": {
-    "mtime": 1779721241.1475415,
-    "ast_hash": "c443b04d0fc26b0a5a4573a78e0082a1",
+  ".opencode/opencode.json": {
+    "mtime": 1781838318.2299166,
+    "ast_hash": "c9e7a6dbe65b966f032666093a1e2c38",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\.opencode\\opencode.json": {
-    "mtime": 1779793575.8915262,
-    "ast_hash": "1efe24ecf938911d4f23e4b1c6ec91f7",
+  ".opencode/package.json": {
+    "mtime": 1781838455.0385654,
+    "ast_hash": "3c9679bfc33f414fac06b8b4daf71a35",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\.opencode\\plugins\\graphify.js": {
-    "mtime": 1779793556.0779026,
-    "ast_hash": "32b67963417a30cb80544e0b2a56a98d",
+  ".opencode/plugins/graphify.js": {
+    "mtime": 1781838654.2900796,
+    "ast_hash": "64ccd3c03dbfe0980b6095766f5c4e52",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\check.py": {
-    "mtime": 1779721241.137475,
-    "ast_hash": "192fd2339675bea19c1f8d2b8da52dab",
+  ".vscode/settings.json": {
+    "mtime": 1781832620.9677577,
+    "ast_hash": "2b361184cee5a4f914d404bd23280e4a",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\config.py": {
-    "mtime": 1779721241.137475,
-    "ast_hash": "44f26a61cad02f81deef10c611adad1c",
-    "semantic_hash": ""
-  },
-  "D:\\jirani_offline_library_backend\\app\\database.py": {
-    "mtime": 1779721241.137475,
-    "ast_hash": "9237389d10eef7f2ed287873c3caf150",
-    "semantic_hash": ""
-  },
-  "D:\\jirani_offline_library_backend\\app\\main.py": {
-    "mtime": 1779721241.1384768,
-    "ast_hash": "8e2315e464807c77ce6fcab230055f38",
-    "semantic_hash": ""
-  },
-  "D:\\jirani_offline_library_backend\\app\\__init__.py": {
-    "mtime": 1779721241.1344268,
+  "backend/app/__init__.py": {
+    "mtime": 1781832620.9691603,
     "ast_hash": "7797eca2e96524b465ba2e8dee327a4d",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\api\\audio_router.py": {
-    "mtime": 1779721241.1354282,
+  "backend/app/api/__init__.py": {
+    "mtime": 1781832620.9695141,
+    "ast_hash": "4e65d3b39009c912a99b88641058442c",
+    "semantic_hash": ""
+  },
+  "backend/app/api/audio_router.py": {
+    "mtime": 1781832620.9696405,
     "ast_hash": "2ddd71ddc83c50b6074cb1531410306c",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\api\\auth_router.py": {
-    "mtime": 1779721241.1354282,
-    "ast_hash": "a297ccfddc597943755d55e8c92fbd18",
+  "backend/app/api/auth_router.py": {
+    "mtime": 1781842380.4176824,
+    "ast_hash": "797fa6e2d7e0b1b7eabb53671faff02b",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\api\\book_router.py": {
-    "mtime": 1779721241.1364756,
+  "backend/app/api/book_router.py": {
+    "mtime": 1781832620.970681,
     "ast_hash": "9a96c6a2493cb5bdd43abc725459a294",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\api\\tag_router.py": {
-    "mtime": 1779721241.1364756,
+  "backend/app/api/setup_router.py": {
+    "mtime": 1781832620.970944,
+    "ast_hash": "ac6253c528da3a85d346110588af2604",
+    "semantic_hash": ""
+  },
+  "backend/app/api/tag_router.py": {
+    "mtime": 1781832620.971014,
     "ast_hash": "25e09e5d960d8cbfe3e685d1cd447614",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\api\\video_router.py": {
-    "mtime": 1779721241.1364756,
+  "backend/app/api/video_router.py": {
+    "mtime": 1781832620.9711165,
     "ast_hash": "35cb83f7d9832e3c0d75a69d43688482",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\api\\__init__.py": {
-    "mtime": 1779721241.1344268,
-    "ast_hash": "3064d7d78d2b3eea3f80affaa3ae4b37",
+  "backend/app/check.py": {
+    "mtime": 1781832620.9711916,
+    "ast_hash": "192fd2339675bea19c1f8d2b8da52dab",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\dependencies\\auth.py": {
-    "mtime": 1779721241.137475,
-    "ast_hash": "aed20360ddbef61d878aa0e9ad5dd532",
+  "backend/app/config.py": {
+    "mtime": 1781832620.9714108,
+    "ast_hash": "e271e2c2e0c575afcf3dada09526af85",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\account.py": {
-    "mtime": 1779721241.1384768,
-    "ast_hash": "028fcc259384aadffe3761b5bf18f362",
+  "backend/app/database.py": {
+    "mtime": 1781832620.97174,
+    "ast_hash": "9237389d10eef7f2ed287873c3caf150",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\account_role.py": {
-    "mtime": 1779721241.1394768,
-    "ast_hash": "53fd1fd495ea2f850ceb350909daf966",
+  "backend/app/dependencies/auth.py": {
+    "mtime": 1781832620.9720361,
+    "ast_hash": "0e4b88a00c9e6557e7247b6daa19937f",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\audio.py": {
-    "mtime": 1779721241.1394768,
+  "backend/app/main.py": {
+    "mtime": 1781832620.9722679,
+    "ast_hash": "9963fdd8d4b47ad83936112575d622dd",
+    "semantic_hash": ""
+  },
+  "backend/app/models/__init__.py": {
+    "mtime": 1781832620.972595,
+    "ast_hash": "294498d987df9feb968c13c820523e75",
+    "semantic_hash": ""
+  },
+  "backend/app/models/account.py": {
+    "mtime": 1781832620.972893,
+    "ast_hash": "bfff4a32bce805a4a17abd1f79ef18f3",
+    "semantic_hash": ""
+  },
+  "backend/app/models/audio.py": {
+    "mtime": 1781832620.972973,
     "ast_hash": "acc8db380344d306397043601e2da411",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\audio_tag.py": {
-    "mtime": 1779721241.1394768,
+  "backend/app/models/audio_tag.py": {
+    "mtime": 1781832620.9730592,
     "ast_hash": "10b83b064d2f8a6af0148c1863d055ec",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\book.py": {
-    "mtime": 1779721241.1394768,
+  "backend/app/models/base.py": {
+    "mtime": 1781832620.9734406,
+    "ast_hash": "b69a6d6b8b472bef2577257ba631541b",
+    "semantic_hash": ""
+  },
+  "backend/app/models/book.py": {
+    "mtime": 1781832620.9738455,
     "ast_hash": "58e454cf3846f4332657094ebe4e5d0a",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\book_tag.py": {
-    "mtime": 1779721241.140477,
+  "backend/app/models/book_tag.py": {
+    "mtime": 1781832620.9743242,
     "ast_hash": "7f7b158f330bf6e6131239a8af3456f1",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\role.py": {
-    "mtime": 1779721241.140477,
-    "ast_hash": "b9187e69b12ffbe5be1ba05248aef54b",
+  "backend/app/models/role_enum.py": {
+    "mtime": 1781832620.9745548,
+    "ast_hash": "541c8c9d25da8f1833bf0fd80c8e3cfd",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\tag.py": {
-    "mtime": 1779721241.140477,
+  "backend/app/models/tag.py": {
+    "mtime": 1781832620.974829,
     "ast_hash": "967a7fcb8b321d55f65d24c9c1a4ca01",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\video.py": {
-    "mtime": 1779721241.140477,
+  "backend/app/models/video.py": {
+    "mtime": 1781832620.9749038,
     "ast_hash": "9bfc5598d4145a18f5f43b64cdac4dac",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\video_tag.py": {
-    "mtime": 1779721241.140477,
+  "backend/app/models/video_tag.py": {
+    "mtime": 1781832620.9749758,
     "ast_hash": "927095c64fa64a707b5de4e51ccc8f8f",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\models\\__init__.py": {
-    "mtime": 1779721241.1384768,
-    "ast_hash": "16bde4b7bc4d7afdc1f46ce9bc4eaa71",
+  "backend/app/repositories/__init__.py": {
+    "mtime": 1781832620.975413,
+    "ast_hash": "ad68e28682a76e0e262fbb22f8d74370",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\repositories\\audio_repo.py": {
-    "mtime": 1779721241.140477,
+  "backend/app/repositories/audio_repo.py": {
+    "mtime": 1781832620.9755018,
     "ast_hash": "f802a5e824ef52b187a1ed628fd80a0f",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\repositories\\book_repo.py": {
-    "mtime": 1779721241.142001,
-    "ast_hash": "44e5e4b604dc75fe7ec9e9242ccb5145",
+  "backend/app/repositories/auth_repo.py": {
+    "mtime": 1781840455.374787,
+    "ast_hash": "deb0a588180b7623a760e0685e6c6607",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\repositories\\tag_repo.py": {
-    "mtime": 1779721241.142001,
+  "backend/app/repositories/book_repo.py": {
+    "mtime": 1781832620.9761286,
+    "ast_hash": "02d4aed028a1ec3bed87297f1f2d0172",
+    "semantic_hash": ""
+  },
+  "backend/app/repositories/tag_repo.py": {
+    "mtime": 1781832620.9763775,
     "ast_hash": "ec6d0674dbda07a8f43f393d7ffcfda0",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\repositories\\video_repo.py": {
-    "mtime": 1779721241.143013,
+  "backend/app/repositories/video_repo.py": {
+    "mtime": 1781832620.9764645,
     "ast_hash": "a0f69cd073495b8643a3f7ab0a23a05e",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\repositories\\__init__.py": {
-    "mtime": 1779721241.140477,
-    "ast_hash": "2e3666afe137b5d58d3ff30bdffed164",
+  "backend/app/schemas/__init__.py": {
+    "mtime": 1781839955.9397764,
+    "ast_hash": "80639a14222f2c0ba10fb225c9a59dae",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\schemas\\account_schema.py": {
-    "mtime": 1779721241.143013,
-    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+  "backend/app/schemas/account_schema.py": {
+    "mtime": 1781840837.9445271,
+    "ast_hash": "451cc5f2b9e61a15af9f83df693a0ecf",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\schemas\\audio_schema.py": {
-    "mtime": 1779721241.143013,
+  "backend/app/schemas/audio_schema.py": {
+    "mtime": 1781832620.97713,
     "ast_hash": "89e2b03fbc93244891f6f6e20efa1545",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\schemas\\auth_schema.py": {
-    "mtime": 1779721241.1440258,
-    "ast_hash": "24651d755ee9423467f3e836820eea7c",
+  "backend/app/schemas/auth_schema.py": {
+    "mtime": 1781839634.3775325,
+    "ast_hash": "03b5f054a90a413a569ab4d0694f2f59",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\schemas\\book_schema.py": {
-    "mtime": 1779721241.1440258,
+  "backend/app/schemas/base_schema.py": {
+    "mtime": 1781832620.9782295,
+    "ast_hash": "c3c3eaf08d3367ee2c09bc64f4c442fa",
+    "semantic_hash": ""
+  },
+  "backend/app/schemas/book_schema.py": {
+    "mtime": 1781832620.9786313,
     "ast_hash": "4f1a20918dfa46fbf3b91e8a9c034f1b",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\schemas\\tag_schema.py": {
-    "mtime": 1779721241.1440258,
+  "backend/app/schemas/tag_schema.py": {
+    "mtime": 1781832620.9788268,
     "ast_hash": "e653e5ff9fa5be25549cb06dfc92ceab",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\schemas\\video_schema.py": {
-    "mtime": 1779721241.1440258,
+  "backend/app/schemas/video_schema.py": {
+    "mtime": 1781832620.9789007,
     "ast_hash": "23c02ef8dea333c3150f2ab262b2283e",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\schemas\\__init__.py": {
-    "mtime": 1779721241.143013,
-    "ast_hash": "e71bf0d9a5d8f571b321459c4b3928a8",
+  "backend/app/services/__init__.py": {
+    "mtime": 1781832620.9791286,
+    "ast_hash": "6258da89bfc90e4bbb6e191bc1fefbe7",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\scripts\\create_admin.py": {
-    "mtime": 1779721241.1440258,
-    "ast_hash": "00a4fa093cc4eced3d59e3a198bc2257",
+  "backend/app/services/auth_service.py": {
+    "mtime": 1781842138.087222,
+    "ast_hash": "b72e7530f4fdb177763ef3882a0bdcca",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\scripts\\create_test_users.py": {
-    "mtime": 1779721241.1455357,
-    "ast_hash": "d176382285dad48f7de10bfd154aa786",
-    "semantic_hash": ""
-  },
-  "D:\\jirani_offline_library_backend\\app\\services\\auth_service.py": {
-    "mtime": 1779721241.1455357,
-    "ast_hash": "017dac30392dca8d04f707863505911e",
-    "semantic_hash": ""
-  },
-  "D:\\jirani_offline_library_backend\\app\\services\\book_service.py": {
-    "mtime": 1779721241.146542,
+  "backend/app/services/book_service.py": {
+    "mtime": 1781832620.9799588,
     "ast_hash": "ad9faad196dddb7281019718983e14de",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\app\\services\\__init__.py": {
-    "mtime": 1779721241.1455357,
-    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
-    "semantic_hash": ""
-  },
-  "D:\\jirani_offline_library_backend\\app\\tests\\video_test.py": {
-    "mtime": 1779721241.146542,
+  "backend/app/tests/video_test.py": {
+    "mtime": 1781832620.9802494,
     "ast_hash": "9d14f0adb41d789a35e3e100a9ee4ab9",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\docker\\entrypoint.sh": {
-    "mtime": 1779721241.146542,
+  "docker/entrypoint.sh": {
+    "mtime": 1781832620.9825938,
     "ast_hash": "224b640824d9667bf7cbead5974992fb",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\docker-compose.yml": {
-    "mtime": 1779721366.7124176,
-    "ast_hash": "0d88e08119610acddbb61d7ec3f0552f",
+  "AGENTS.md": {
+    "mtime": 1781838654.2898998,
+    "ast_hash": "52b399eed2e03e6f7ce1e7a6bbd52291",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\memory.md": {
-    "mtime": 1779721241.1475415,
-    "ast_hash": "7f12c7c0ea1f1684303f86ff0e383af3",
-    "semantic_hash": ""
-  },
-  "D:\\jirani_offline_library_backend\\README.md": {
-    "mtime": 1779721241.133427,
+  "README.md": {
+    "mtime": 1781832620.9681625,
     "ast_hash": "85be58b94a8ccc9d6e0468ea61aef5e4",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\requirements.txt": {
-    "mtime": 1779721241.1485393,
+  "backend/requirements.txt": {
+    "mtime": 1781832620.98075,
     "ast_hash": "f168aed3d67e854ad661958cc23c8c87",
     "semantic_hash": ""
   },
-  "D:\\jirani_offline_library_backend\\docs\\superpowers\\specs\\2026-05-02-docker-entrypoint-uploads-design.md": {
-    "mtime": 1779721241.1475415,
+  "docker-compose.yml": {
+    "mtime": 1781832620.9822934,
+    "ast_hash": "966ec3c90c5603543a8f96e1d6699f67",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-06-02-auth-redesign-plan.md": {
+    "mtime": 1781838009.0813334,
+    "ast_hash": "1e34c8f891a9a88f188012246cb32930",
+    "semantic_hash": ""
+  },
+  "docs/specs/2026-06-02-auth-redesign-design.md": {
+    "mtime": 1781832620.9834387,
+    "ast_hash": "f3539f4ff5970224e3806196d0c9f160",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-05-26-monorepo-restructure.md": {
+    "mtime": 1781838318.2310758,
+    "ast_hash": "39613f9306f192ff6792674676972a0e",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-05-02-docker-entrypoint-uploads-design.md": {
+    "mtime": 1781838318.2312973,
     "ast_hash": "1bb94a4ec3a8ec08b31fb3611c8100dc",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-05-26-monorepo-restructure-design.md": {
+    "mtime": 1781838318.2316191,
+    "ast_hash": "2cf5ad861827d287e1b362e7d56f4206",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-06-04-mass-account-creation-design.md": {
+    "mtime": 1781832620.9841158,
+    "ast_hash": "6d97b82a4dfeae94dcb86913f5578719",
+    "semantic_hash": ""
+  },
+  "memory.md": {
+    "mtime": 1781832620.9846463,
+    "ast_hash": "7f12c7c0ea1f1684303f86ff0e383af3",
     "semantic_hash": ""
   }
 }
