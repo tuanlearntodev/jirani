@@ -42,11 +42,11 @@ In a real production app, you would use **Alembic** to write migration scripts t
 |---|---|---|
 | `app/models/enums.py` | **Create** | `RoleEnum` lives here |
 | `app/models/base.py` | **Create** | `TimestampMixin` lives here |
-| `app/models/account.py` | **Rewrite** | SQLAlchemy 2.0 style, add `role`, timestamps, `must_change_password` |
+| `app/models/account.py` | **Rewrite** | SQLAlchemy 2.0 style, add `role`, timestamps, `first_login` |
 | `app/models/role.py` | **Delete** | Replaced by `RoleEnum` |
 | `app/models/account_role.py` | **Delete** | Merged into `accounts` table |
 | `app/models/__init__.py` | **Update** | Remove old imports |
-| `app/schemas/auth_schema.py` | **Rewrite** | Pydantic v2 style, Annotated types, add `must_change_password` to TokenResponse |
+| `app/schemas/auth_schema.py` | **Rewrite** | Pydantic v2 style, Annotated types, add `first_login` to TokenResponse |
 | `app/schemas/account_schema.py` | **Populate** | Layered schemas: Base → Create → Read, add bulk schemas |
 | `app/repositories/auth_repo.py` | **Create** | DB queries for auth (get_by_username, create, list, get_next_prefix_number) |
 | `app/services/auth_service.py` | **Update** | Role-aware credential validation, uses AuthRepo, bulk_create_users |
@@ -739,19 +739,25 @@ uvicorn app.main:app --reload
 
 ---
 
-## Task 15: Add `must_change_password` flag to `Account` model
+## Task 15: Add `first_login` flag to `Account` model
 
-**Why:** When a teacher or admin creates a new teacher account, the password is auto-generated. The teacher must change it on first login — they should not be able to use the auto-generated password for normal operations. A boolean flag on the `Account` model tracks whether the user needs to change their password.
+**Why:** When a teacher or admin creates a new teacher account, the password is auto-generated. The teacher must change it on first login — they should not be able to use the auto-generated password for normal operations. A boolean flag on the `Account` model tracks whether this is the user's first login.
 
 **Concept — SQLAlchemy boolean column with default:**
 ```python
-must_change_password: Mapped[bool] = mapped_column(default=True)
+first_login: Mapped[bool] = mapped_column(default=True)
 ```
 New accounts default to `True`. After the user changes their password, set it to `False`.
 
+**Design — force password change:**
+- If `first_login` is `True`, the login endpoint returns a flag indicating the user must change their password
+- The frontend blocks access to the app until the password is changed
+- After `POST /auth/change-password` succeeds, set `first_login = False`
+- Students can use the app immediately with their auto-generated PIN (no forced change)
+
 **Hints:**
 - Open `app/models/account.py`
-- Add `must_change_password: Mapped[bool] = mapped_column(default=True, server_default=text("true"))`
+- Add `first_login: Mapped[bool] = mapped_column(default=True, server_default=text("1"))`
 - For SQLite, `server_default=text("1")` works. For PostgreSQL, `server_default=text("true")`
 - Since you're using `Base.metadata.create_all()`, delete the existing DB file so it rebuilds with the new column:
   ```bash
@@ -762,13 +768,13 @@ New accounts default to `True`. After the user changes their password, set it to
 ```bash
 cd backend
 python -c "from app.models import Account; print([c.name for c in Account.__table__.columns])"
-# Should include 'must_change_password'
+# Should include 'first_login'
 ```
 
-- [ ] Add `must_change_password` column to `Account` model
+- [ ] Add `first_login` column to `Account` model
 - [ ] Delete existing SQLite DB so it rebuilds with new column
 - [ ] Verify no import errors
-- [ ] Commit: `git commit -m "feat: add must_change_password flag to Account model"`
+- [ ] Commit: `git commit -m "feat: add first_login flag to Account model"`
 
 ---
 
@@ -858,8 +864,8 @@ def create_user(self, metadata: AccountCreate) -> tuple[Account, str]:
 The caller unpacks: `account, password = service.create_user(data)`. This is Python's idiomatic way to return multiple related values.
 
 **Design — password rules:**
-- **Students**: auto-generated 6-digit PIN (e.g., `123456`)
-- **Teachers**: auto-generated URL-safe string (e.g., `xK9mP2qR`)
+- **Students**: auto-generated 6-digit PIN (e.g., `123456`), `first_login=False` (can use immediately)
+- **Teachers**: auto-generated URL-safe string (e.g., `xK9mP2qR`), `first_login=True` (must change on first login)
 - **Admins**: cannot be created via API (only via `/setup`)
 
 **Hints:**
@@ -871,7 +877,8 @@ The caller unpacks: `account, password = service.create_user(data)`. This is Pyt
   - Generate username: `f"{bulk_data.prefix}{number:03d}"`
   - Check if username already exists (skip if so, increment number, continue)
   - Generate password: `generate_student_password()` or `generate_teacher_password()` based on role
-  - Create `Account` with username, hashed password, role, first_name, last_name, `must_change_password=True` for teachers
+  - Create `Account` with username, hashed password, role, first_name, last_name
+  - Set `first_login=True` for teachers, `first_login=False` for students
   - Add to session, commit, refresh
   - Append `{username, password, role}` to a credentials list
   - Increment number
@@ -879,7 +886,7 @@ The caller unpacks: `account, password = service.create_user(data)`. This is Pyt
 - Modify `create_user()` to:
   - Always auto-generate password (remove `password` field from `AccountCreate`)
   - Return `tuple[Account, str]` (account + raw password)
-  - Set `must_change_password=True` for teacher accounts
+  - Set `first_login=True` for teacher accounts, `False` for students
 - Modify `reset_student_password()` to return `tuple[Account, str]`
 
 **Verify:**
@@ -904,7 +911,7 @@ python -c "from app.services import AuthService; print('OK')"
 The only admin account is created once via `/setup`. No endpoint allows creating additional admin accounts. If a request tries to create an admin, return 400.
 
 **Design — first login password change:**
-When a teacher logs in with `must_change_password=True`, the login response should include a flag indicating they must change their password. The frontend will then redirect them to a password change screen.
+When a teacher logs in with `first_login=True`, the login response includes `first_login: true`. The frontend blocks access to the app and forces the user to change their password. After `POST /auth/change-password` succeeds, `first_login` is set to `False` and the user can use the app normally.
 
 **Concept — FastAPI endpoint pattern:**
 ```python
@@ -922,10 +929,10 @@ The pattern is consistent: guard → validate → call service → return. If th
 
 **Hints for each endpoint:**
 
-### `POST /auth/token` (login) — update to include `must_change_password` flag
-- After authenticating, include `must_change_password` in the response
-- Update `TokenResponse` schema to include `must_change_password: bool`
-- Return: `TokenResponse(access_token=..., username=..., role=..., must_change_password=user.must_change_password)`
+### `POST /auth/token` (login) — update to include `first_login` flag
+- After authenticating, include `first_login` in the response
+- Update `TokenResponse` schema to include `first_login: bool`
+- Return: `TokenResponse(access_token=..., username=..., role=..., first_login=user.first_login)`
 
 ### `POST /auth/users` (create single user — new)
 - Protect with `RoleChecker([RoleEnum.admin, RoleEnum.teacher])`
@@ -965,23 +972,23 @@ The pattern is consistent: guard → validate → call service → return. If th
 - Verify old password → 400 if incorrect
 - Call `AuthService.validate_credentials(current_user.role, new_password, context="self_change")` — catch `ValueError` → 400
 - Call `auth_service.change_password(current_user.username, new_password)`
-- Set `current_user.must_change_password = False` and commit
+- Set `current_user.first_login = False` and commit
 - Return success message
 
 **Verify:**
 Start the server and test each endpoint via Swagger UI (`http://localhost:8000/docs`):
 1. `GET /setup` → get admin credentials
-2. `POST /auth/token` → login as admin, get token (must_change_password should be False)
+2. `POST /auth/token` → login as admin, get token (`first_login` should be False)
 3. `POST /auth/users` → create a teacher account → response includes raw password
 4. `POST /auth/users` as teacher → try to create admin → should get 403
 5. `POST /auth/users/bulk` → `{"count": 5, "role": "student", "prefix": "classA"}` → creates `classA001` through `classA005`
 6. `GET /auth/users` as teacher → should only see students
 7. `GET /auth/me` as student → should return student profile
-8. `POST /auth/token` as teacher → login, `must_change_password` should be True
-9. `POST /auth/change-password` as teacher → change password, `must_change_password` becomes False
+8. `POST /auth/token` as teacher → login, `first_login` should be True
+9. `POST /auth/change-password` as teacher → change password, `first_login` becomes False
 10. `POST /auth/reset-password` as teacher → reset student PIN → returns new 6-digit PIN
 
-- [ ] Add `must_change_password` to `TokenResponse` schema
+- [ ] Add `first_login` to `TokenResponse` schema
 - [ ] Rewrite `auth_router.py` with all 7 endpoints
 - [ ] Test each endpoint via Swagger UI
 - [ ] Commit: `git commit -m "feat: redesign auth router with bulk creation and security fixes"`
@@ -1054,20 +1061,21 @@ This replaces the real database with a fresh in-memory one for each test run. Te
   1. `test_setup_first_visit_generates_credentials` → 200, password in response
   2. `test_setup_second_visit_returns_403` → 403
   3. `test_login_wrong_password` → 401
-  4. `test_login_teacher_must_change_password_true` → 200, `must_change_password` is True
-  5. `test_create_student_as_admin` → 201, auto-generated 6-digit credential in response
-  6. `test_create_teacher_as_admin` → 201, auto-generated password, `must_change_password` is True
-  7. `test_create_admin_as_anyone` → 400 (cannot create admin via API)
-  8. `test_create_admin_as_teacher` → 403
-  9. `test_bulk_create_students` → 200, returns list of usernames + passwords
-  10. `test_bulk_create_as_teacher_only_students` → 200 for students, 403 for teachers
-  11. `test_bulk_create_no_admin` → 400 when requesting admin role
-  12. `test_reset_password_as_teacher` → 200, new 6-digit credential in response
-  13. `test_reset_teacher_password_as_teacher` → 403 (teacher can't reset other teachers)
-  14. `test_get_users_as_teacher_only_sees_students` → 200, all returned roles are `student`
-  15. `test_student_can_change_own_password` → 200, with min 4 char password
-  16. `test_student_change_password_too_short` → 422 (password < 4 chars)
-  17. `test_change_password_clears_must_change_flag` → after change, `must_change_password` is False
+  4. `test_login_teacher_first_login_true` → 200, `first_login` is True
+  5. `test_login_student_first_login_false` → 200, `first_login` is False
+  6. `test_create_student_as_admin` → 201, auto-generated 6-digit credential in response
+  7. `test_create_teacher_as_admin` → 201, auto-generated password, `first_login` is True
+  8. `test_create_admin_as_anyone` → 400 (cannot create admin via API)
+  9. `test_create_admin_as_teacher` → 403
+  10. `test_bulk_create_students` → 200, returns list of usernames + passwords
+  11. `test_bulk_create_as_teacher_only_students` → 200 for students, 403 for teachers
+  12. `test_bulk_create_no_admin` → 400 when requesting admin role
+  13. `test_reset_password_as_teacher` → 200, new 6-digit credential in response
+  14. `test_reset_teacher_password_as_teacher` → 403 (teacher can't reset other teachers)
+  15. `test_get_users_as_teacher_only_sees_students` → 200, all returned roles are `student`
+  16. `test_student_can_change_own_password` → 200, with min 4 char password
+  17. `test_student_change_password_too_short` → 422 (password < 4 chars)
+  18. `test_change_password_clears_first_login_flag` → after change, `first_login` is False
 
 **Run tests:**
 ```bash

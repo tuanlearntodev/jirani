@@ -7,7 +7,7 @@ class AccountBase(BaseModel):
     last_name: str = Field(..., min_length=1, max_length=50)
     first_name: str = Field(..., min_length=1, max_length=50)
     
-class AccountCreate(AccountBase):
+class AccountCreateRequest(AccountBase):
     role: RoleEnum
     
 class AccountRead(AccountBase):
@@ -17,9 +17,7 @@ class AccountRead(AccountBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    
-class CreateUserResponse(AccountRead):
-    credentials: str | None = None
+
 
 class BulkCreateRequest(BaseModel):
     count: int = Field(..., ge=1, le=100)

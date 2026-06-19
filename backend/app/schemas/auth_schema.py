@@ -12,6 +12,10 @@ class LoginRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     account_id: int
+    
+class PasswordChangeResponse(BaseModel):
+    message: str
+    new_password: str
 
 class ChangePasswordRequest(BaseModel):
     new_password: password_str
@@ -21,4 +25,4 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     username: str
-    roles: str
+    role: str

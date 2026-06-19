@@ -29,6 +29,7 @@ class AuthRepo:
     
     def change_password(self, account: Account, new_hashed_password: str) -> Account:
         account.hashed_password = new_hashed_password
+        account.first_login = False
         self.db_session.commit()
         self.db_session.refresh(account)
         return account

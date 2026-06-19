@@ -1,10 +1,11 @@
+from ast import Raise
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt
 from passlib.context import CryptContext
 from app.config import settings
 from app.models import Account, RoleEnum
-from app.schemas import AccountCreate, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse
+from app.schemas import AccountCreateRequest, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse
 from app.repositories import AuthRepo
 import random, secrets
 
@@ -43,7 +44,9 @@ class AuthService:
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        return pwd_context.verify(plain_password, hashed_password)
+        if pwd_context.verify(plain_password, hashed_password):
+            return True
+        raise ValueError("Invalid password format.")
 
     @staticmethod
     def get_password_hash(password: str) -> str:
@@ -57,11 +60,11 @@ class AuthService:
         account = self.auth_repo.get_by_username(username)
         if not account:
             return None
-        if not AuthService.verify_password(password, account.hashed_password):
+        if not self.verify_password(password, account.hashed_password):
             return None
         return account
 
-    def create_user(self, metadata: AccountCreate) -> tuple[Account, str]:
+    def create_user(self, metadata: AccountCreateRequest) -> tuple[Account, str]:
         existing_user = self.get_user_by_username(metadata.username)
         if existing_user:
             raise ValueError(f"Username '{metadata.username}' is already taken.")
@@ -72,7 +75,7 @@ class AuthService:
             password = self.generate_teacher_password()
             first_login = True
         else:
-            raise ValueError("Only student and teacher accounts can be created via this endpoint.")
+            raise PermissionError("Only student and teacher accounts can be created via this endpoint.")
 
         hashed_password = self.get_password_hash(password)
         new_account = Account(
@@ -115,7 +118,7 @@ class AuthService:
         if not user:
             raise ValueError(f"User with ID '{account_id}' not found.")
         if user.role != RoleEnum.student and user.role != RoleEnum.teacher:
-            raise ValueError("Password reset is only allowed for students or teachers accounts.")
+            raise PermissionError("You cannot reset password for admin account.")
         if user.role == RoleEnum.student:
             password = self.generate_student_password()
             hashed_password = self.get_password_hash(password)
@@ -143,13 +146,13 @@ class AuthService:
     
     def bulk_create_users(self, bulk_data: BulkCreateRequest) -> BulkCreateResponse:
         if bulk_data.role == RoleEnum.admin:
-            raise ValueError("Cannot create admin accounts via bulk endpoint")
+            raise PermissionError("Cannot create admin accounts via bulk endpoint")
         
         created_accounts = []
         number = self.auth_repo.get_next_prefix_number(bulk_data.prefix)
         
         for i in range(bulk_data.count):
-            username = f"{bulk_data.prefix}{number}"
+            username = f"{bulk_data.prefix}{number:03d}"
             number +=1
             if self.get_user_by_username(username):
                 continue

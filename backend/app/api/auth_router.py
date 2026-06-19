@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.repositories import AuthRepo
 from app.schemas import TokenResponse, LoginRequest, ResetPasswordRequest, ChangePasswordRequest
+from app.schemas import AccountCreateRequest
+from app.schemas.account_schema import BulkCreateRequest, BulkCreateResponse
 from app.services import AuthService
 from app.models import Account, RoleEnum
 from app.dependencies.auth import get_current_user, RoleChecker
@@ -20,18 +22,18 @@ async def login(login_data: LoginRequest,
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
     access_token = auth_service.create_token_for_user(user)
-    return TokenResponse(access_token=access_token, token_type="bearer", username=user.username, roles=user.role)
+    return TokenResponse(access_token=access_token, token_type="bearer", username=user.username, role=user.role)
 
 
-@router.post("/reset-student-password", status_code=status.HTTP_200_OK)
-async def reset_student_password(
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(
     reset_data: ResetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
     current_user: Account = Depends(RoleChecker([RoleEnum.teacher, RoleEnum.admin]))
 ):
     try:
-        updated = auth_service.reset_student_password(reset_data.account_id)
-        return {"message": f"Password reset for {updated.username}"}
+        updated, password = auth_service.reset_password(reset_data.account_id)
+        return {"message": f"Password reset for {updated.username}", "new_password": password}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -47,3 +49,28 @@ async def change_password(
     auth_service.change_password(current_user.username, change_data.new_password)
     return {"message": "Password changed successfully"}
 
+@router.post("/user", status_code=status.HTTP_201_CREATED)
+async def create_user(
+    user_data: AccountCreateRequest,
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    try:
+        new_user = auth_service.create_user(user_data)
+        return {"message": "User created successfully", "user": new_user}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+@router.post("/users/bulk", status_code=status.HTTP_201_CREATED)
+async def bulk_create_users(
+    bulk_data: BulkCreateRequest,
+    auth_service: AuthService = Depends(get_auth_service)
+)-> BulkCreateResponse:
+    try:
+        response = auth_service.bulk_create_users(bulk_data)
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
