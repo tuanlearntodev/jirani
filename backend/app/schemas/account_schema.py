@@ -10,14 +10,17 @@ class AccountBase(BaseModel):
 class AccountCreateRequest(AccountBase):
     role: RoleEnum
     
+class AccountCreateResponse(BaseModel):
+    username: str
+    credential: str
 class AccountRead(AccountBase):
     model_config = {"from_attributes":True}
     id: int
     role: RoleEnum
     is_active: bool
+    first_login: bool
     created_at: datetime
     updated_at: datetime
-
 
 class BulkCreateRequest(BaseModel):
     count: int = Field(..., ge=1, le=100)

@@ -18,7 +18,7 @@ class AuthRepo:
         self.db_session.refresh(account)
         return account
       
-    def list_all(self, role: Optional[RoleEnum] = None) -> list[Account]:
+    def get_all_users(self, role: Optional[RoleEnum] = None) -> list[Account]:
         query = self.db_session.query(Account)
         if role is not None:
             query = query.filter(Account.role == role)

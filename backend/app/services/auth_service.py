@@ -5,7 +5,7 @@ from jose import jwt
 from passlib.context import CryptContext
 from app.config import settings
 from app.models import Account, RoleEnum
-from app.schemas import AccountCreateRequest, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse
+from app.schemas import AccountCreateRequest, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse, AccountRead
 from app.repositories import AuthRepo
 import random, secrets
 
@@ -113,7 +113,7 @@ class AuthService:
         }
         return AuthService.create_access_token(token_data)
     
-    def reset_password(self, account_id: int) -> tuple[Account, str]:
+    def reset_password(self, account_id: int, user_role: RoleEnum) -> tuple[Account, str]:
         user = self.auth_repo.get_by_id(account_id)
         if not user:
             raise ValueError(f"User with ID '{account_id}' not found.")
@@ -122,7 +122,9 @@ class AuthService:
         if user.role == RoleEnum.student:
             password = self.generate_student_password()
             hashed_password = self.get_password_hash(password)
-        elif user.role == RoleEnum.teacher:
+        if user.role == RoleEnum.teacher and user_role == RoleEnum.teacher:
+            raise PermissionError("You cannot reset other teachers' passwords.")
+        elif user.role == RoleEnum.teacher and user_role == RoleEnum.admin:
             password = self.generate_teacher_password()
             hashed_password = self.get_password_hash(password)
         user.hashed_password = hashed_password
@@ -144,10 +146,11 @@ class AuthService:
         self.auth_repo.create_account(new_admin)
         return new_admin
     
-    def bulk_create_users(self, bulk_data: BulkCreateRequest) -> BulkCreateResponse:
+    def bulk_create_users(self, bulk_data: BulkCreateRequest, user_role: RoleEnum) -> BulkCreateResponse:
         if bulk_data.role == RoleEnum.admin:
             raise PermissionError("Cannot create admin accounts via bulk endpoint")
-        
+        if bulk_data.role == RoleEnum.teacher and user_role != RoleEnum.admin:
+            raise PermissionError("Only admins can create teacher accounts.")
         created_accounts = []
         number = self.auth_repo.get_next_prefix_number(bulk_data.prefix)
         
@@ -177,3 +180,15 @@ class AuthService:
             self.auth_repo.create_account(new_account)
             created_accounts.append(BulkCredentialItem(username=username, password=password, role=bulk_data.role))
         return BulkCreateResponse(created=len(created_accounts), accounts=created_accounts)
+    
+    def get_all_users(self, user_role: Optional[RoleEnum] = None)-> list[AccountRead]:
+        if(user_role==RoleEnum.teacher):
+            accounts = self.auth_repo.get_all_users(role=RoleEnum.student)
+        elif(user_role==RoleEnum.admin):
+            accounts = self.auth_repo.get_all_users()
+        return [AccountRead.model_validate(account) for account in accounts]
+    
+    def get_user_by_id(self, user_id: int) -> AccountRead:
+        if not (account := self.auth_repo.get_by_id(user_id)):
+            raise ValueError("User not found")
+        return AccountRead.model_validate(account)

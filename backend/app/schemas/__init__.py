@@ -4,7 +4,7 @@
 from .auth_schema import LoginRequest, ResetPasswordRequest, ChangePasswordRequest, TokenResponse
 from .book_schema import BookBase, BookCreate, BookRead, BookDetail, BookUpload
 from .tag_schema import TagBase, TagRead, TagCreate
-from .account_schema import AccountBase, AccountCreateRequest, AccountRead, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse
+from .account_schema import AccountBase, AccountCreateRequest, AccountRead, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse, AccountCreateResponse
 
 
 __all__ = [
@@ -20,6 +20,7 @@ __all__ = [
     "BulkCreateRequest",
     "BulkCredentialItem",
     "BulkCreateResponse",
+    "AccountCreateResponse",
     # Book schemas
     "BookBase",
     "BookCreate",

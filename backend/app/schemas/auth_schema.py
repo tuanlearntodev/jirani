@@ -26,3 +26,4 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     username: str
     role: str
+    first_login: bool
