@@ -33,6 +33,14 @@ Rules:
 - Let the `architect` handle design documents, the `manager` handle task parsing into JSON schemas, and the `coder`/`tester` manage the local terminal test execution.
 - Do not attempt to write code manually when a multi-step task list is running.
 
+## State Management
+
+When the user signals task completion ("verify and commit", "done", "ship it", "we're done", "that's it", "heading out", "goodbye"), invoke the `state` skill to update `STATE.md` before responding.
+
+When the user says "remind me to do X" / "remember to" / "don't forget to", append to `STATE.md` under "Remind Me (Future)" AND create a Memory MCP TODO entity.
+
+On "session handoff" / "switching machines" / "new machine" / "handoff", do a full `STATE.md` refresh and ensure it's committed. The user resumes on a new machine with `git pull && cat STATE.md`.
+
 ## External Knowledge & Global Search (MCPs)
 
 - **Context7 (`context7`):** Use this MCP server to pull external API documentation, updated library specifications, or deep remote context missing from the local repo.
