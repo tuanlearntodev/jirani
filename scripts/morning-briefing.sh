@@ -4,7 +4,9 @@
 
 set -euo pipefail
 
-REPO_DIR="/mnt/d/jirani_offline_library_backend"
+# Auto-detect repo root from script location (works on any machine)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUTPUT_DIR="$REPO_DIR/todos"
 OUTPUT_FILE="$OUTPUT_DIR/morning-briefing.md"
 PREV_FILE="$OUTPUT_DIR/morning-briefing.prev.md"
