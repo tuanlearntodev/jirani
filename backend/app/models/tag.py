@@ -1,9 +1,12 @@
 from app.database import Base
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import mapped_column, relationship, Mapped
-from app.models.book import Book
-from app.models.audio import Audio
-from app.models.video import Video
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.book import Book
+    from app.models.audio import Audio
+    from app.models.video import Video
 
 class Tag(Base):
     

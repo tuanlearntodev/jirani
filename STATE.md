@@ -1,6 +1,6 @@
 # Project State — Jirani Offline Library Backend
 
-**Last Updated:** 2026-07-09 19:14 (commit 41d1135)
+**Last Updated:** 2026-07-09 19:20 (commit b754208)
 **Branch:** refactor
 **Uncommitted:** graphify-out/ (auto-regenerated), opencode package files
 
@@ -21,7 +21,7 @@ FastAPI + PostgreSQL backend for an offline library. Auth system fully refactore
 - [ ] Configure git credential helper to avoid push hanging on other machine (priority: medium, added: 2026-07-08)
 
 ## Decisions Log
-- 2026-07-09: Tag model updated to 2.0 style — `Mapped[]` + `mapped_column()`, string type references in relationships to avoid circular imports. Bonus cleanup, not a plan task.
+- 2026-07-09: Tag model updated to 2.0 style — `Mapped[]` + `mapped_column()`, string type references in relationships with `TYPE_CHECKING` guard for Pylance/mypy type resolution without circular imports.
 - 2026-07-09: Dropped `is_active` from `BookTag` — dead column, never queried or toggled. Simplifies the junction table to just `id`, `book_id`, `tag_id` + UniqueConstraint.
 - 2026-07-09: Removed `themes` from book refactor plan — `tags` is the single categorization system (subjects + genres in one flat list). Simplified plan from 17 to 16 tasks, eliminated 3 files (theme.py, book_theme.py, theme_schema.py). `metadata_` JSONB remains as extensibility escape hatch.
 - 2026-07-09: App is now Postgres-only — removed all SQLite references (config.py default URL, check.py deleted, video_test.py deleted). Docker is the test+ship environment; no WSL venv needed.
