@@ -160,26 +160,26 @@ Note: the DB column is `metadata` (the print shows column names, not Python attr
 
 ## Task 3: Clean up `BookTag` to 2.0 style
 
-**Why:** `BookTag` is the junction table between books and tags. It's still in SQLAlchemy 1.x `Column()` style. This task rewrites it to 2.0 `Mapped[]` + `mapped_column()` style for consistency with the new `Book` model, so `mypy --strict` passes and your editor gets type hints.
+**Why:** `BookTag` is the junction table between books and tags. It's still in SQLAlchemy 1.x `Column()` style. This task rewrites it to 2.0 `Mapped[]` + `mapped_column()` style for consistency with the new `Book` model, so `mypy --strict` passes and your editor gets type hints. Also drops the unused `is_active` column — it defaults to `True`, nothing ever sets it to `False`, and no query filters on it.
 
 **Hints for `app/models/book_tag.py`:**
 - Rewrite in `Mapped[]` + `mapped_column()` style
 - `id: Mapped[int]` — PK
 - `book_id: Mapped[int]` — `ForeignKey("books.id", ondelete="CASCADE")`, nullable=False
 - `tag_id: Mapped[int]` — `ForeignKey("tags.id", ondelete="CASCADE")`, nullable=False
-- `is_active: Mapped[bool]` — `default=True`
+- **Drop `is_active`** — dead column, never queried or toggled
 - Keep `__table_args__ = (UniqueConstraint("book_id", "tag_id"),)`
 
 **Verify:**
 ```bash
 cd backend
 python -c "from app.models.book_tag import BookTag; print(sorted(BookTag.__table__.columns.keys()))"
-# ['book_id', 'id', 'is_active', 'tag_id']
+# ['book_id', 'id', 'tag_id']
 ```
 
-- [ ] Rewrite `app/models/book_tag.py` in 2.0 style
-- [ ] Verify column list
-- [ ] Commit: `git commit -m "refactor: update BookTag to SQLAlchemy 2.0 style"`
+- [ ] Rewrite `app/models/book_tag.py` in 2.0 style (drop `is_active`)
+- [ ] Verify column list (no `is_active`)
+- [ ] Commit: `git commit -m "refactor: update BookTag to SQLAlchemy 2.0 style, drop unused is_active"`
 
 ---
 
