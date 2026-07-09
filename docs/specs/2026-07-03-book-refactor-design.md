@@ -48,16 +48,25 @@ The refactor fixes all of the above and makes search trivially extensible.
 
 ### 2. Data model — single `books` table, SQLAlchemy 2.0, hybrid attributes
 
-The `books` table is rewritten in `Mapped[]` + `mapped_column()` style and gains `TimestampMixin`. New typed, indexed columns cover the high-value fields named now; a native `JSONB` `metadata` column carries arbitrary future attributes with no migration.
+The `books` table is rewritten in `Mapped[]` + `mapped_column()` style and gains `TimestampMixin`. Three typed, indexed columns cover the single-value query axes. The existing `tags` system handles multi-value categorization (subjects, genres — all in one flat list). A native `JSONB` `metadata` column carries arbitrary future attributes with no migration.
+
+**Query priority (drives the data model):**
+1. `level` — "level 1", "grade 2" (primary filter, single-value → column)
+2. `book_type` — "storybook", "novel" (tertiary filter, single-value → column; named `book_type` because `type` shadows a Python builtin)
+3. `language` — "en", "sw" (last filter, single-value → column)
+4. `tags` — "math", "algebra", "sci fi" (multi-value → existing many-to-many `tags` + `book_tags`)
+
+`level`, `book_type`, and `language` are **single-value per book** — that's why they're columns. `tags` is **multi-value** — that's why it's a many-to-many relationship. `author` is kept as a stored/displayed column (extracted from EPUBs) but is not a primary search axis; the `q` text query optionally matches title **and** author.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | int PK | |
 | `uid` | String(36) unique indexed | **full UUID4** (was `[:8]`) |
-| `title` | String(255) not null | |
-| `author` | String(255) nullable indexed | **new** |
-| `level` | String(50) nullable indexed | **new** |
-| `language` | String(10) nullable indexed | **new** |
+| `title` | String(255) not null indexed | indexed for sort/exact-match; `q` does ilike |
+| `author` | String(255) nullable | display field; `q` optionally matches it |
+| `level` | String(50) nullable indexed | **new** — primary query axis (single-value) |
+| `book_type` | String(50) nullable indexed | **new** — tertiary query axis (single-value) |
+| `language` | String(50) nullable indexed | **new** — last query axis (single-value) |
 | `cover_path` | String nullable | relative filename |
 | `file_path` | String not null | relative filename |
 | `extension` | String(10) not null | `pdf` \| `epub` |
@@ -66,20 +75,18 @@ The `books` table is rewritten in `Mapped[]` + `mapped_column()` style and gains
 | `created_at` | DateTime | via `TimestampMixin` |
 | `updated_at` | DateTime | via `TimestampMixin` |
 
-`book_tags` and `tags` are unchanged (light 2.0-style cleanup only).
-
 **PostgreSQL specifics:**
 - `metadata` uses the native `JSONB` type (`from sqlalchemy.dialects.postgresql import JSONB`), not the generic `JSON`. JSONB supports `@>` (containment), `?` (key exists), and `->>` (text extraction) operators, and can be GIN-indexed for fast ad-hoc queries.
 - A **GIN index** on `metadata` makes `?` and `@>` lookups fast without per-key indexes: `Index("ix_books_metadata_gin", "metadata", postgresql_using="gin")`.
 - Boolean defaults use `server_default=text("true")` (Postgres style), not `text("1")`.
-- `uid` could use Postgres's native `UUID` type, but `String(36)` is kept for portability and simplicity — a future enhancement.
+- `uid` could use Postgres's native `UUID` type with `gen_random_uuid()` as server default — a future enhancement.
 
 **Schema reset workflow (no Alembic yet):** the app uses `Base.metadata.create_all()`, which is additive-only — it will not drop or alter existing tables. Because this refactor changes the `books` table shape, the plan includes a task to drop and rebuild just the book tables via psql:
 
 ```sql
 -- Connect to the jirani_library database, then:
 DROP TABLE IF EXISTS book_tags, books CASCADE;
--- Restart the app; create_all() rebuilds them with the new columns.
+-- Restart the app; create_all() rebuilds them with the new schema.
 ```
 
 This is the Postgres equivalent of the auth plan's "delete the SQLite file", scoped to the book tables only so `accounts` data survives. In a real production app you would use **Alembic** migrations — noted as a future learning topic.
@@ -90,16 +97,17 @@ The extensibility goal is the heart of this refactor. All search input flows thr
 
 ```
 class BookSearchCriteria(BaseModel):
-    q: str | None = None          # title ilike
-    author: str | None = None
-    level: str | None = None
-    language: str | None = None
-    tags: list[str] | None = None
+    q: str | None = None            # title ilike (also matches author)
+    level: str | None = None        # equality — primary axis (single-value)
+    tags: list[str] | None = None # join (multi-value, like existing tags)
+    book_type: str | None = None    # equality — tertiary axis (single-value)
+    language: str | None = None     # equality — last axis (single-value)
+    tags: list[str] | None = None   # join (multi-value)
     extension: str | None = None
     metadata: dict[str, Any] | None = None   # ad-hoc — NO code change
 ```
 
-`BookRepo.search(criteria, limit, offset)` builds the query dynamically: `and_` of optional filters, tags via join, metadata via **Postgres JSONB operators** (`Book.metadata.op("->>")(key) == value` for text equality, `Book.metadata.contains({key: value})` for containment, `Book.metadata.has_key(key)` for existence). The GIN index on `metadata` keeps these fast.
+`BookRepo.search(criteria, limit, offset)` builds the query dynamically: `and_` of optional filters. The three single-value axes (`level`, `book_type`, `language`) use **equality** (`==`) — perfect for their btree indexes. `q` uses `or_(Book.title.ilike(...), Book.author.ilike(...))`. `tags` requires a join (`stmt.join(Book.tags).where(Tag.name.in_(...))`). Metadata via **Postgres JSONB operators** (`Book.metadata.op("->>")(key) == value` for text equality, `Book.metadata.contains({key: value})` for containment, `Book.metadata.has_key(key)` for existence). The GIN index on `metadata` keeps those fast.
 
 - **Add a typed field later** (e.g. `publisher`): one attribute on the criteria + one `if` branch in the builder + one query param on the router. One migration if you want it indexed.
 - **Add an ad-hoc field** (e.g. `isbn`): `?metadata[isbn]=978...` — **zero code change, zero migration**.
@@ -148,7 +156,7 @@ All new code carries full type hints and must pass `mypy --strict` (AGENTS.md De
 `app/tests/test_books.py` uses a test database fixture in `conftest.py`. Because the target is PostgreSQL, tests use a dedicated `jirani_library_test` database (created once) with `Base.metadata.drop_all()` + `create_all()` per test session — not in-memory SQLite, so JSONB operators behave identically to production. If the auth plan already created a Postgres test fixture, reuse it. Coverage:
 
 - CRUD happy paths (upload pdf + epub, update, delete)
-- Search by each typed field + by `metadata` path + combined filters
+- Search by each single-value field (`level`, `book_type`, `language`) + multi-value (`tags`) + `metadata` path + combined filters
 - Pagination (`limit` / `offset`, `total` correctness)
 - Streaming with Range request → 206, without Range → 200
 - Auth guards: student blocked from write endpoints, teacher/admin allowed
@@ -163,11 +171,11 @@ All Pydantic schemas use `model_config = ConfigDict(from_attributes=True)` (v2 s
 
 | Schema | Purpose |
 |---|---|
-| `BookBase` | Shared read fields: `uid`, `title`, `author`, `level`, `language`, `extension`, `cover_url` (computed), `tags` |
+| `BookBase` | Shared read fields: `uid`, `title`, `author`, `level`, `book_type`, `language`, `extension`, `cover_url` (computed), `tags` |
 | `BookRead(BookBase)` | Response: adds `id`, `created_at`, `metadata` |
 | `BookCreate` | Internal (service → repo): adds `file_path`, `cover_path` |
-| `BookUpdate` | All-optional: `title`, `author`, `level`, `language`, `tags`, `metadata`, optional new `cover` / `file` handled at the router |
-| `BookUpload` | Multipart form input: `title?`, `author?`, `level?`, `language?`, `tags`, keeps validators |
+| `BookUpdate` | All-optional: `title`, `author`, `level`, `book_type`, `language`, `tags`, `metadata`, optional new `cover` / `file` handled at the router |
+| `BookUpload` | Multipart form input: `title?`, `author?`, `level?`, `book_type?`, `language?`, `tags`, keeps validators |
 | `BookSearchCriteria` | Extensible search input (see section 3) |
 | `Page[T]` | Generic `{items: list[T], total: int, limit: int, offset: int}` |
 
@@ -181,20 +189,22 @@ All Pydantic schemas use `model_config = ConfigDict(from_attributes=True)` (v2 s
 | `app/models/book.py` | Rewrite: SQLAlchemy 2.0, new columns, `TimestampMixin`, full UUID |
 | `app/models/book_tag.py` | Light 2.0-style cleanup |
 | `app/schemas/book_schema.py` | Rewrite: layered schemas, `BookSearchCriteria`, `Page` |
+| `app/schemas/__init__.py` | Export new schemas |
 | `app/repositories/book_repo.py` | Rewrite: dynamic search, pagination, 2.0 style |
 | `app/services/book_service.py` | Thin orchestration only |
 | `app/api/book_router.py` | Rewrite: auth guards, consolidated Range streaming, paginated list/search |
-| `app/schemas/__init__.py` | Export new schemas |
+| `app/main.py` | Verify (no changes expected) |
 
 ### Created
 | File | Purpose |
 |---|---|
+| `app/services/book_errors.py` | `BookError` hierarchy |
 | `app/services/book_file_storage.py` | Chunked save, size cap, delete, filename |
 | `app/services/cover_generator.py` | PDF + EPUB cover extraction |
 | `app/services/content_validator.py` | Magic-byte validation |
 | `app/services/epub_metadata_reader.py` | EPUB subject/author/language extraction |
 | `app/tests/test_books.py` | Book feature tests |
-| `app/tests/conftest.py` | In-memory DB fixture (if not already present from auth plan) |
+| `app/tests/conftest.py` | Postgres test DB fixture (if not already present from auth plan) |
 
 ### Deleted (behavior removed, not files)
 - `/books/{uid}/epub` endpoint

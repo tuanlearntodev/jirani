@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # Database settings
-    DATABASE_URL: str = "sqlite:///./data/jirani_library.db"
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/jirani_library"
     
     # Security settings
     SECRET_KEY: str = get_secret_key()

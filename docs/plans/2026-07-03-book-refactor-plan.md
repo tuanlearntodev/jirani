@@ -43,9 +43,10 @@ In a real production app, you would use **Alembic** to write migration scripts t
 
 | File | Action | What changes |
 |---|---|---|
-| `app/models/book.py` | **Rewrite** | SQLAlchemy 2.0 style; add `author`, `level`, `language`, JSONB `metadata`; `TimestampMixin`; full UUID; drop `file_type` |
+| `app/models/book.py` | **Rewrite** | SQLAlchemy 2.0 style; add `author`, `level`, `book_type`, `language`, JSONB `metadata`; `TimestampMixin`; full UUID; drop `file_type` |
 | `app/models/book_tag.py` | **Light update** | 2.0 style cleanup |
-| `app/schemas/book_schema.py` | **Rewrite** | Layered `Base → Create → Read → Update`; `BookUpload`; `BookSearchCriteria`; `Page[T]` |
+| `app/models/__init__.py` | **Update** | Export any new models |
+| `app/schemas/book_schema.py` | **Rewrite** | Layered `Base → Create → Read → Update`; `BookUpload` with `tags`; `BookSearchCriteria` with `tags: list[str]`; `Page[T]` |
 | `app/schemas/__init__.py` | **Update** | Export new schemas |
 | `app/repositories/book_repo.py` | **Rewrite** | Dynamic search from criteria, pagination, 2.0 style, no `file_type` |
 | `app/services/book_service.py` | **Shrink** | Thin orchestration only |
@@ -125,10 +126,11 @@ Your `app/models/base.py` already defines `TimestampMixin` with `created_at` and
 - Columns to define (use `Mapped[]` + `mapped_column()`):
   - `id: Mapped[int]` — PK, index
   - `uid: Mapped[str]` — `String(36)`, unique, indexed, nullable=False (full UUID4 string)
-  - `title: Mapped[str]` — `String(255)`, nullable=False
-  - `author: Mapped[str | None]` — `String(255)`, indexed
-  - `level: Mapped[str | None]` — `String(50)`, indexed
-  - `language: Mapped[str | None]` — `String(10)`, indexed
+  - `title: Mapped[str]` — `String(255)`, nullable=False, indexed (for sort/exact-match; `q` does ilike which won't use the index but is fine at this scale)
+  - `author: Mapped[str | None]` — `String(255)`, **not indexed** (display field; `q` optionally matches it via `or_`)
+  - `level: Mapped[str | None]` — `String(50)`, indexed — **primary query axis** ("level 1", "grade 2"). Single-value.
+  - `book_type: Mapped[str | None]` — `String(50)`, indexed — **tertiary query axis** ("storybook", "novel"). Named `book_type` because `type` shadows a Python builtin. Single-value.
+  - `language: Mapped[str | None]` — `String(50)`, indexed — **last query axis** ("en", "sw"). Single-value.
   - `cover_path: Mapped[str | None]` — `String`
   - `file_path: Mapped[str]` — `String`, nullable=False
   - `extension: Mapped[str]` — `String(10)`, nullable=False
@@ -145,20 +147,20 @@ Your `app/models/base.py` already defines `TimestampMixin` with `created_at` and
 ```bash
 cd backend
 python -c "from app.models.book import Book; print(sorted(Book.__table__.columns.keys()))"
-# Should print: ['author', 'cover_path', 'created_at', 'extension', 'file_path', 'id', 'language', 'level', 'metadata', 'title', 'uid', 'updated_at']
+# Should print: ['author', 'book_type', 'cover_path', 'created_at', 'extension', 'file_path', 'id', 'language', 'level', 'metadata', 'title', 'uid', 'updated_at']
 # Must NOT include 'file_type'
 ```
 Note: the DB column is `metadata` (the print shows column names, not Python attr names).
 
 - [ ] Rewrite `app/models/book.py`
-- [ ] Verify column list (no `file_type`, has `metadata`, `author`, `level`, `language`, `created_at`, `updated_at`)
+- [ ] Verify column list (no `file_type`; has `metadata`, `author`, `level`, `book_type`, `language`, `created_at`, `updated_at`)
 - [ ] Commit: `git commit -m "refactor: rewrite Book model in SQLAlchemy 2.0 with JSONB metadata"`
 
 ---
 
-## Task 3: Light cleanup of `BookTag` model
+## Task 3: Clean up `BookTag` to 2.0 style
 
-**Why:** Consistency. If `Book` is in 2.0 style, the junction table should be too. Small task, but it keeps the model layer uniform.
+**Why:** `BookTag` is the junction table between books and tags. It's still in SQLAlchemy 1.x `Column()` style. This task rewrites it to 2.0 `Mapped[]` + `mapped_column()` style for consistency with the new `Book` model, so `mypy --strict` passes and your editor gets type hints.
 
 **Hints for `app/models/book_tag.py`:**
 - Rewrite in `Mapped[]` + `mapped_column()` style
@@ -177,13 +179,13 @@ python -c "from app.models.book_tag import BookTag; print(sorted(BookTag.__table
 
 - [ ] Rewrite `app/models/book_tag.py` in 2.0 style
 - [ ] Verify column list
-- [ ] Commit: `git commit -m "refactor: update BookTag model to SQLAlchemy 2.0 style"`
+- [ ] Commit: `git commit -m "refactor: update BookTag to SQLAlchemy 2.0 style"`
 
 ---
 
 ## Task 4: Drop and rebuild the book tables
 
-**Why:** `Base.metadata.create_all()` is additive only. Your old `books` table has the old columns (`file_type`, no `author`/`level`/`language`/`metadata`). Dropping just the book tables and restarting rebuilds them with the new schema — your `accounts` data is untouched.
+**Why:** `Base.metadata.create_all()` is additive only. Your old `books` table has the old columns (`file_type`, no `author`/`level`/`book_type`/`language`/`metadata`). Dropping the book-related tables and restarting rebuilds them with the new schema — your `accounts` data is untouched.
 
 **Steps:**
 - [ ] Make sure your postgres container is running:
@@ -212,6 +214,11 @@ python -c "from app.models.book_tag import BookTag; print(sorted(BookTag.__table
   docker exec -it jirani_postgres psql -U postgres -d jirani_library -c \
     "SELECT indexname FROM pg_indexes WHERE tablename='books';"
   # Should list 'ix_books_metadata_gin' with indexdef containing 'USING gin'
+  ```
+- [ ] Verify the tables were created:
+  ```bash
+  docker exec -it jirani_postgres psql -U postgres -d jirani_library -c "\dt"
+  # Should list: books, book_tags (plus accounts, tags, etc.)
   ```
 - [ ] Stop the server with Ctrl+C
 - [ ] Commit: `git commit -m "chore: drop and rebuild book tables for new schema"`
@@ -272,7 +279,7 @@ Define `cover_url` **once** on `BookBase` — the current code duplicates it acr
 - Import `TagRead`, `TagCreate` from `app.schemas.tag_schema`
 - Import `re` for the title validator
 - Define `BookBase`:
-  - Fields: `uid: str`, `title: str`, `author: str | None = None`, `level: str | None = None`, `language: str | None = None`, `extension: str`, `tags: list[TagRead] = []`, `cover_path: str | None = None`
+  - Fields: `uid: str`, `title: str`, `author: str | None = None`, `level: str | None = None`, `book_type: str | None = None`, `language: str | None = None`, `extension: str`, `tags: list[TagRead] = []`, `cover_path: str | None = None`
   - `model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)`
   - Computed `cover_url` (defined once here)
 - Define `BookRead(BookBase)`:
@@ -282,17 +289,17 @@ Define `cover_url` **once** on `BookBase` — the current code duplicates it acr
   - Adds `file_path: str`, `cover_path: str | None = None`, `tags: list[TagCreate] = []`
   - This is internal — service → repo. Not an API response.
 - Define `BookUpdate(BaseModel)`:
-  - All-optional: `title: str | None = None`, `author: str | None = None`, `level: str | None = None`, `language: str | None = None`, `tags: list[TagCreate] | None = None`, `metadata_: dict[str, Any] | None = None`
+  - All-optional: `title: str | None = None`, `author: str | None = None`, `level: str | None = None`, `book_type: str | None = None`, `language: str | None = None`, `tags: list[TagCreate] | None = None`, `metadata_: dict[str, Any] | None = None`
   - `model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)`
 - Define `BookUpload(BaseModel)`:
-  - Multipart form input — all optional: `title: str | None = Field(None, min_length=1, max_length=255)`, `author: str | None = Field(None, max_length=255)`, `level: str | None = Field(None, max_length=50)`, `language: str | None = Field(None, max_length=10)`, `tags: list[TagCreate] = Field(default_factory=list, max_length=20)`
+  - Multipart form input — all optional: `title: str | None = Field(None, min_length=1, max_length=255)`, `author: str | None = Field(None, max_length=255)`, `level: str | None = Field(None, max_length=50)`, `book_type: str | None = Field(None, max_length=50)`, `language: str | None = Field(None, max_length=50)`, `tags: list[TagCreate] = Field(default_factory=list, max_length=20)`
   - Keep the existing `validate_title` and `validate_tags` field validators (port them over)
 - Define `BookSearchCriteria(BaseModel)`:
-  - `q: str | None = None` (title ilike)
-  - `author: str | None = None`
-  - `level: str | None = None`
-  - `language: str | None = None`
-  - `tags: list[str] | None = None`
+  - `q: str | None = None` (title ilike; also matches author via `or_`)
+  - `level: str | None = None` (equality — primary axis)
+  - `book_type: str | None = None` (equality — tertiary axis)
+  - `language: str | None = None` (equality — last axis)
+  - `tags: list[str] | None = None` (join — multi-value)
   - `extension: str | None = None`
   - `metadata_: dict[str, Any] | None = None` (ad-hoc JSONB filters)
   - All optional — empty criteria = return all (paginated)
@@ -301,14 +308,14 @@ Define `cover_url` **once** on `BookBase` — the current code duplicates it acr
 
 **Hints for `app/schemas/__init__.py`:**
 - Update the book imports to: `BookBase, BookCreate, BookRead, BookUpdate, BookUpload, BookSearchCriteria, Page`
-- Add them all to `__all__`
+- Add all new schemas to `__all__`
 
 **Verify:**
 ```bash
 cd backend
 python -c "
 from app.schemas import BookBase, BookRead, BookCreate, BookUpdate, BookUpload, BookSearchCriteria, Page
-c = BookSearchCriteria(q='alice', metadata_={'publisher': 'Penguin'})
+c = BookSearchCriteria(q='alice', tags=['math', 'algebra'], metadata_={'publisher': 'Penguin'})
 print(c.model_dump())
 p = Page[BookRead](items=[], total=0, limit=20, offset=0)
 print(p.model_dump())
@@ -329,20 +336,28 @@ print('OK')
 
 **Concept — Dynamic query building with SQLAlchemy:**
 ```python
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 def search(self, criteria: BookSearchCriteria, limit: int, offset: int) -> tuple[list[Book], int]:
     stmt = select(Book).options(joinedload(Book.tags))
     filters = []
     if criteria.q:
-        filters.append(Book.title.ilike(f"%{criteria.q}%"))
-    if criteria.author:
-        filters.append(Book.author.ilike(f"%{criteria.author}%"))
-    # ...more filters...
+        # q matches title OR author (loose text search)
+        filters.append(or_(Book.title.ilike(f"%{criteria.q}%"), Book.author.ilike(f"%{criteria.q}%")))
+    # The three single-value axes use equality — they hit the btree indexes
+    if criteria.level:
+        filters.append(Book.level == criteria.level)
+    if criteria.book_type:
+        filters.append(Book.book_type == criteria.book_type)
+    if criteria.language:
+        filters.append(Book.language == criteria.language)
+    if criteria.extension:
+        filters.append(Book.extension == criteria.extension)
+    # ...metadata filters (see below)...
     if filters:
         stmt = stmt.where(and_(*filters))
-    # tags need a join
+    # tags need a join (multi-value many-to-many)
     if criteria.tags:
         stmt = stmt.join(Book.tags).where(Tag.name.in_([t.lower() for t in criteria.tags]))
     # count total (for pagination) — use a subquery or separate count query
@@ -353,6 +368,10 @@ def search(self, criteria: BookSearchCriteria, limit: int, offset: int) -> tuple
     return books, total
 ```
 Note the use of `select()` + `session.execute()` — that's the SQLAlchemy 2.0 way. The old `db.query(Book)` style still works but is legacy. Use `.unique()` when you `joinedload` a collection to avoid duplicate parent rows.
+
+**Why equality (`==`) for `level`/`book_type`/`language`, not `ilike`:** these are categorical fields with a fixed set of values ("level 1", "storybook", "en"). Exact match is what you want, and it uses the btree index. `ilike` would match "level 10" when you query "level 1" — wrong. Reserve `ilike` for free-text fields (`q` → title/author).
+
+**Why `tags` uses a join, not equality:** `tags` is multi-value (a book can be "math" **and** "algebra"). It's a many-to-many relationship, so filtering requires joining through `book_tags` and using `Tag.name.in_([...])`.
 
 **Concept — JSONB filtering in SQLAlchemy:**
 ```python
@@ -375,8 +394,9 @@ filters.append(Book.metadata_.op("->>")(key) == value)
 - Import `Book`, `Tag` from `app.models`, `BookCreate`, `BookUpdate`, `BookSearchCriteria` from `app.schemas`.
 - Methods to implement:
   - `get_by_uid(uid: str) -> Book | None` — `select(Book).options(joinedload(Book.tags)).where(Book.uid == uid)`, return `.scalar_one_or_none()` (use `.unique()` first because of the joinedload)
-  - `create(self, book_create: BookCreate) -> Book` — same tag-attach logic as today (find-or-create tags by `ilike`), but use 2.0 style. Raise `ValueError(f"Book with UID {uid} already exists")` on duplicate. Commit + refresh + return.
-  - `update(self, uid: str, update: BookUpdate) -> Book` — fetch the book (404 → `ValueError`), apply only the non-None fields from `update` via `setattr`. If `update.tags is not None`, clear and re-attach. If `update.metadata_ is not None`, merge into existing `metadata_` dict (don't overwrite — merge, so partial metadata updates don't drop existing keys). Commit + refresh + cleanup orphan tags + return.
+  - `get_by_uid(uid: str) -> Book | None` — `select(Book).options(joinedload(Book.tags)).where(Book.uid == uid)`, return `.scalar_one_or_none()` (use `.unique()` first because of the joinedload)
+  - `create(self, book_create: BookCreate) -> Book` — same tag-attach logic as today (find-or-create tags by `ilike`). Raise `ValueError(f"Book with UID {uid} already exists")` on duplicate. Commit + refresh + return.
+  - `update(self, uid: str, update: BookUpdate) -> Book` — fetch the book (404 → `ValueError`), apply only the non-None fields from `update` via `setattr`. If `update.tags is not None`, clear and re-attach (find-or-create). If `update.metadata_ is not None`, merge into existing `metadata_` dict (don't overwrite — merge, so partial metadata updates don't drop existing keys). Commit + refresh + cleanup orphan tags + return.
   - `delete(self, uid: str) -> None` — fetch (404 → `ValueError`), delete, commit, cleanup orphan tags.
   - `search(self, criteria: BookSearchCriteria, limit: int, offset: int) -> tuple[list[Book], int]` — build dynamically per the concept above. Return `(books, total_count)`.
   - `cleanup_orphan_tags(self) -> None` — same logic as today, 2.0 style.
@@ -548,6 +568,7 @@ The current code uses `fitz.open(path).metadata` which returns a dict with `subj
 - Class `EpubMetadataReader`:
   - `read(path: Path) -> EpubMetadata` — extract title, author, language, subjects (list of str). Return a small dataclass or `TypedDict` `EpubMetadata`.
   - Define `EpubMetadata` as a dataclass: `title: str | None`, `author: str | None`, `language: str | None`, `subjects: list[str]`
+  - The EPUB `subject` field maps naturally to **tags** (math, science, algebra). The service will merge these with user-provided tags on upload. You could also extract `book_type` from EPUB `<dc:type>` if present, but it's rarely populated — leave it as `None` and let the user fill it via the form.
   - Split `subjects` by comma/semicolon like the current `_extract_epub_tags` does
   - Log (don't raise) on parse errors — return an empty `EpubMetadata` if extraction fails
 - The `strip_ns` helper in the concept above is needed because OPF tags are namespaced (`{http://purl.org/dc/elements/1.1/}title`)
@@ -671,7 +692,7 @@ The service holds its helpers as dependencies (composition). This makes it testa
 - Methods:
   - `get_by_uid(uid: str) -> BookRead` — fetch via repo, raise `BookNotFoundError` if None, return `BookRead.model_validate(book)`
   - `search(criteria: BookSearchCriteria, limit: int, offset: int) -> Page[BookRead]` — call `repo.search`, build and return `Page[BookRead](items=[BookRead.model_validate(b) for b in books], total=total, limit=limit, offset=offset)`
-  - `async def upload(self, metadata: BookUpload, file: UploadFile, cover: UploadFile | None) -> BookRead` — orchestrate per the concept. Use `asyncio.get_event_loop().run_in_executor(None, self.cover_gen.generate, ...)` for cover generation (it's sync). If `metadata.title` is empty, derive from filename (same as current). Merge extracted epub tags with user-provided tags (dedupe by lowercased name). Use `file.content_type or f"application/{extension}"` — wait, you dropped `file_type`. Just store `extension` and derive MIME at stream time. Build `BookCreate(uid=..., title=..., author=..., level=..., language=..., extension=..., file_path=filename, cover_path=cover_name, tags=...)`. On any exception, call `storage.delete_book_file` / `storage.delete_cover` for the saved paths, then re-raise.
+  - `async def upload(self, metadata: BookUpload, file: UploadFile, cover: UploadFile | None) -> BookRead` — orchestrate per the concept. Use `asyncio.get_event_loop().run_in_executor(None, self.cover_gen.generate, ...)` for cover generation (it's sync). If `metadata.title` is empty, derive from filename (same as current). Merge extracted epub tags with user-provided tags (dedupe by lowercased name). Just store `extension` and derive MIME at stream time. Build `BookCreate(uid=..., title=..., author=..., level=..., book_type=..., language=..., extension=..., file_path=filename, cover_path=cover_name, tags=...)`. On any exception, call `storage.delete_book_file` / `storage.delete_cover` for the saved paths, then re-raise.
   - `async def update(self, uid: str, update: BookUpdate, cover: UploadFile | None) -> BookRead` — fetch (raise `BookNotFoundError` if missing). If new cover provided, validate + save + delete old. Build a `BookUpdate` with only the changed fields and call `repo.update`. **Do not** rebuild a full `BookCreate` — that was the old bug. Just pass the partial update through.
   - `delete(self, uid: str) -> None` — fetch (raise `BookNotFoundError`), delete files via storage, delete row via repo.
 - **No `HTTPException` imports.** No `print`. No file I/O (delegate to storage). No zip parsing (delegate to cover_gen / epub_reader).
@@ -773,11 +794,11 @@ Map each `BookError` subclass to its status (404 / 409 / 400). Map `OSError` →
 - `logger = logging.getLogger(__name__)`
 - `get_book_service(db: Session = Depends(get_db)) -> BookService` — wire up `BookRepo(db)` + the four service helpers (`BookFileStorage`, `ContentValidator`, `CoverGenerator`, `EpubMetadataReader`). The helpers that don't need `db` can be instantiated once at module level or per-request — per-request is simpler.
 - Endpoints:
-  - `GET /` — paginated list + search. Query params: `q`, `author`, `level`, `language`, `extension` (all `str | None = None`), `tags: str | None = None` (comma-separated, parse to list), `metadata` (skip this one — complex query param; note in a comment that metadata search is available via the schema but not exposed as a query param yet), `limit: int = Query(20, ge=1, le=100)`, `offset: int = Query(0, ge=0)`. Build `BookSearchCriteria` from the params. Auth: `RoleChecker([RoleEnum.student, RoleEnum.teacher, RoleEnum.admin])`. `response_model=Page[BookRead]`.
+  - `GET /` — paginated list + search. Query params: `q`, `level`, `book_type`, `language`, `extension` (all `str | None = None`), `tags: str | None = None` (comma-separated, parse to list), `metadata` (skip this one — complex query param; note in a comment that metadata search is available via the schema but not exposed as a query param yet), `limit: int = Query(20, ge=1, le=100)`, `offset: int = Query(0, ge=0)`. Build `BookSearchCriteria` from the params. Auth: `RoleChecker([RoleEnum.student, RoleEnum.teacher, RoleEnum.admin])`. `response_model=Page[BookRead]`.
   - `GET /{uid}` — detail. `response_model=BookRead`. Auth: any. Map `BookNotFoundError` → 404.
   - `GET /{uid}/stream` — Range streaming per the concept above. Auth: any. Derive `media_type` from `book.extension`. Parse the Range header (write a helper `_parse_range(range_header: str, file_size: int) -> tuple[int, int]`).
-  - `POST /` — upload. Form params: `title`, `author`, `level`, `language` (all `str | None = Form(None)`), `tags: str = Form("")` (comma-separated → parse to `list[TagCreate]`), `file: UploadFile = File(...)`, `cover: UploadFile | None = File(None)`. Build `BookUpload`. Auth: `RoleChecker([RoleEnum.teacher, RoleEnum.admin])`. `response_model=BookRead`, `status_code=201`. Map `InvalidFileError` → 400, `BookExistsError` → 409, `OSError` → 500.
-  - `PUT /{uid}` — update. Form params: `title`, `author`, `level`, `language`, `tags`, `cover: UploadFile | None = File(None)`. Build `BookUpdate` from the non-None values. Auth: teacher/admin. `response_model=BookRead`. Map `BookNotFoundError` → 404, `InvalidFileError` → 400, `OSError` → 500.
+  - `POST /` — upload. Form params: `title`, `author`, `level`, `book_type`, `language` (all `str | None = Form(None)`), `tags: str = Form("")` (comma-separated → parse to `list[TagCreate]`), `file: UploadFile = File(...)`, `cover: UploadFile | None = File(None)`. Build `BookUpload`. Auth: `RoleChecker([RoleEnum.teacher, RoleEnum.admin])`. `response_model=BookRead`, `status_code=201`. Map `InvalidFileError` → 400, `BookExistsError` → 409, `OSError` → 500.
+  - `PUT /{uid}` — update. Form params: `title`, `author`, `level`, `book_type`, `language`, `tags`, `cover: UploadFile | None = File(None)`. Build `BookUpdate` from the non-None values. Auth: teacher/admin. `response_model=BookRead`. Map `BookNotFoundError` → 404, `InvalidFileError` → 400, `OSError` → 500.
   - `DELETE /{uid}` — delete. `status_code=204`. Auth: teacher/admin. Map `BookNotFoundError` → 404, `OSError` → 500.
 - **Remove** `/upload`, `/search/`, `/{uid}/epub`, `/{uid}/read` — all gone.
 - Helper `_iter_file(path: Path, chunk_size: int = 256 * 1024) -> Iterator[bytes]` — same as current.
@@ -938,24 +959,25 @@ def test_upload_pdf(client, teacher_token):
   6. `test_list_empty` — `GET /books/` → 200, `{"items": [], "total": 0, "limit": 20, "offset": 0}`
   7. `test_list_with_pagination` — upload 3 books, `GET /books/?limit=2&offset=0` → 2 items, total 3; `?offset=2` → 1 item
   8. `test_search_by_title` — upload "Alice in Wonderland", `GET /books/?q=Alice` → 1 result
-  9. `test_search_by_author` — upload with `author=Alice`, `GET /books/?author=Alice` → 1 result
-  10. `test_search_by_level` — upload with `level=beginner`, `GET /books/?level=beginner` → 1 result
-  11. `test_search_by_language` — upload with `language=en`, `GET /books/?language=en` → 1 result
-  12. `test_search_by_tags` — upload with tags `["math", "algebra"]`, `GET /books/?tags=math` → 1 result
-  13. `test_search_combined` — upload two books with different author + level, combine filters → only matching book returned
-  14. `test_get_by_uid` — upload, then `GET /books/{uid}` → 200, full detail
-  15. `test_get_by_uid_not_found` — `GET /books/nonexistent` → 404
-  16. `test_stream_without_range` — `GET /books/{uid}/stream` → 200, `Content-Length` set, body is the full file
-  17. `test_stream_with_range` — `GET /books/{uid}/stream` with `Range: bytes=0-99` → 206, `Content-Range: bytes 0-99/<size>`, body is 100 bytes
-  18. `test_stream_not_found` — `GET /books/nonexistent/stream` → 404
-  19. `test_update_metadata` — upload, then `PUT /books/{uid}` with new `author` → 200, author changed, other fields preserved
-  20. `test_update_cover` — upload, then `PUT` with a new cover file → 200, `cover_path` changed (and old cover file deleted — verify by checking the path)
-  21. `test_delete` — upload, then `DELETE /books/{uid}` → 204, then `GET /books/{uid}` → 404
-  22. `test_delete_not_found` — `DELETE /books/nonexistent` → 404
-  23. `test_student_cannot_upload` — student token, `POST /books/` → 403
-  24. `test_student_cannot_delete` — student token, `DELETE /books/{uid}` → 403
-  25. `test_student_can_read` — student token, `GET /books/` → 200
-  26. `test_unauthenticated_blocked` — no token, `GET /books/` → 401
+  9. `test_search_by_q_matches_author` — upload with `author=Alice`, `GET /books/?q=Alice` → 1 result (q matches author too)
+  10. `test_search_by_level` — upload with `level=level 1`, `GET /books/?level=level%201` → 1 result
+  11. `test_search_by_book_type` — upload with `book_type=storybook`, `GET /books/?book_type=storybook` → 1 result
+  12. `test_search_by_language` — upload with `language=en`, `GET /books/?language=en` → 1 result
+  13. `test_search_by_tags` — upload with tags `["math", "algebra"]`, `GET /books/?tags=math` → 1 result
+  14. `test_search_combined` — upload two books with different level + tags, combine `?level=level%201&tags=math` → only matching book returned
+  15. `test_get_by_uid` — upload, then `GET /books/{uid}` → 200, full detail
+  16. `test_get_by_uid_not_found` — `GET /books/nonexistent` → 404
+  17. `test_stream_without_range` — `GET /books/{uid}/stream` → 200, `Content-Length` set, body is the full file
+  18. `test_stream_with_range` — `GET /books/{uid}/stream` with `Range: bytes=0-99` → 206, `Content-Range: bytes 0-99/<size>`, body is 100 bytes
+  19. `test_stream_not_found` — `GET /books/nonexistent/stream` → 404
+  20. `test_update_metadata` — upload, then `PUT /books/{uid}` with new `author` and `tags` → 200, both changed, other fields preserved
+  21. `test_update_cover` — upload, then `PUT` with a new cover file → 200, `cover_path` changed (and old cover file deleted — verify by checking the path)
+  22. `test_delete` — upload, then `DELETE /books/{uid}` → 204, then `GET /books/{uid}` → 404
+  23. `test_delete_not_found` — `DELETE /books/nonexistent` → 404
+  24. `test_student_cannot_upload` — student token, `POST /books/` → 403
+  25. `test_student_cannot_delete` — student token, `DELETE /books/{uid}` → 403
+  26. `test_student_can_read` — student token, `GET /books/` → 200
+  27. `test_unauthenticated_blocked` — no token, `GET /books/` → 401
 - Use the `client` and `teacher_token` / `student_token` fixtures from `conftest.py`
 - For fake PDFs/EPUBs: `io.BytesIO` with the right magic bytes (`b"%PDF-1.4\n..."` for PDF, `b"PK\x03\x04..."` for EPUB — a minimal valid ZIP is harder; for invalid-magic tests just use wrong bytes)
 - Run: `pytest app/tests/test_books.py -v`
