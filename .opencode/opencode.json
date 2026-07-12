@@ -34,41 +34,5 @@
       "enabled": true,
       "timeout": 10000
     }
-  },
-  "agent": {
-    "architect": {
-      "mode": "subagent",
-      "model": "opencode/glm-5.1",
-      "options": {
-        "temperature": 0.7
-      }
-    },
-    "manager": {
-      "mode": "subagent",
-      "model": "opencode/qwen3.6-plus",
-      "options": {
-        "temperature": 0.2
-      }
-    },
-    "coder": {
-      "mode": "subagent",
-      "model": "opencode/deepseek-v4-flash-free",
-      "options": {
-        "temperature": 0.1
-      }
-    },
-    "tester": {
-      "mode": "subagent",
-      "model": "opencode/deepseek-v4-flash-free",
-      "options": {
-        "temperature": 0.1
-      }
-    },
-    "general": {
-      "model": "opencode/glm-5.1",
-      "options": {
-        "temperature": 0.3
-      }
-    }
   }
 }

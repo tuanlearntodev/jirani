@@ -1,6 +1,6 @@
 ---
 name: state
-description: Manages STATE.md, the project's living status file. Use when the user signals task completion ("verify and commit", "done", "ship it", "we're done", "that's it", "heading out", "goodbye"), says "remind me to do X" / "remember to" / "don't forget to", or says "session handoff" / "switching machines" / "new machine" / "handoff". Updates project state, in-progress work, reminders, decisions, and graveyard on every trigger.
+description: Manages STATE.md, the project's living status file. Use when the user signals task completion ("verify and commit", "done", "ship it", "we're done", "that's it", "heading out", "goodbye"), says "remind me to do X" / "remember to" / "don't forget to", says "session handoff" / "switching machines" / "new machine" / "handoff", or confirms a commit ("yes", "commit it", "go ahead", "commit please", "push it") after being asked to commit. Updates project state, in-progress work, reminders, decisions, and graveyard on every trigger.
 compatibility: opencode
 ---
 
@@ -15,6 +15,7 @@ compatibility: opencode
 Trigger on any of these signals from the user:
 
 - **Task completion:** "verify and commit", "done", "ship it", "we're done", "that's it", "heading out", "goodbye"
+- **Commit confirmation:** "yes", "commit it", "go ahead", "commit please", "push it" — when the user confirms a commit you proposed (you asked "want me to commit?" and they said yes)
 - **Reminder:** "remind me to do X", "remember to X", "don't forget to X"
 - **Session handoff:** "session handoff", "switching machines", "new machine", "handoff"
 
@@ -31,6 +32,17 @@ Trigger on any of these signals from the user:
 7. If approaches were tried and failed, append to `## Graveyard` with the attempt and why it failed.
 8. Update `## Next Steps` with the immediate next technical steps.
 9. Save the file. Do NOT auto-commit unless the user explicitly asked to commit.
+
+### On commit confirmation ("yes", "commit it", "go ahead", etc.)
+
+This is a lighter update than full task completion — the user already decided to commit, just update state to reflect what was committed.
+
+1. Read the current `STATE.md` (create if missing).
+2. Update the header: `Last Updated` (current timestamp + new commit sha after commit lands), `Branch`, `Uncommitted`.
+3. If the committed work completed an in-progress item, mark it `[x]` or remove from `## In Progress`.
+4. If decisions were made, append to `## Decisions Log`.
+5. Update `## Next Steps` if the commit unblocks the next task.
+6. Save `STATE.md`. Commit it together with the user's requested changes (same commit).
 
 ### On "remind me to do X"
 

@@ -73,9 +73,8 @@ Any uncommitted changes that look risky, any tasks that seem stuck.
 Keep it concise. This is read over coffee, not a dissertation.
 Output ONLY the markdown briefing. No commentary, no preamble, no postscript." \
   --dir "$REPO_DIR" \
-  --agent general \
   --model "opencode/deepseek-v4-flash-free" \
-  --format json 2>/dev/null | \
+  --format json 2>"$OUTPUT_DIR/briefing.log" | \
   python3 -c "
 import sys, json
 

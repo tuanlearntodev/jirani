@@ -35,7 +35,7 @@ Rules:
 
 ## State Management
 
-When the user signals task completion ("verify and commit", "done", "ship it", "we're done", "that's it", "heading out", "goodbye"), invoke the `state` skill to update `STATE.md` before responding.
+When the user signals task completion ("verify and commit", "done", "ship it", "we're done", "that's it", "heading out", "goodbye") OR confirms a commit you proposed ("yes", "commit it", "go ahead", "commit please", "push it"), invoke the `state` skill to update `STATE.md` before responding.
 
 When the user says "remind me to do X" / "remember to" / "don't forget to", append to `STATE.md` under "Remind Me (Future)" AND create a Memory MCP TODO entity.
 
