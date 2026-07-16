@@ -4,6 +4,12 @@
     ".opencode/plugins/graphify.js",
     "superpowers@git+https://github.com/obra/superpowers.git"
   ],
+  "command": {
+    "todo": {
+      "description": "Generate a project briefing — what's done, what's overdue, what to work on next",
+      "prompt": "Invoke the todo skill to generate a project briefing. Read STATE.md, the refactor plan, git log, and previous briefing. Show what's overdue, what's done, what's next, and a 30-minute plan for today."
+    }
+  },
   "mcp": {
     "context7": {
       "type": "remote",

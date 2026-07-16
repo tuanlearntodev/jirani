@@ -1,11 +1,11 @@
 # Project State — Jirani Offline Library Backend
 
-**Last Updated:** 2026-07-12 15:10 (commit 95fbb75)
+**Last Updated:** 2026-07-12 15:20 (commit 8e64680)
 **Branch:** refactor
-**Uncommitted:** scripts/morning-briefing.sh (fixed: removed --agent general, errors to log file), AGENTS.md (state skill triggers updated), .opencode/skills/state/SKILL.md (commit confirmation trigger added), .opencode/opencode.json (playwright/sequential-thinking MCPs added), todos/ (regenerated briefings), graphify-out/ (auto-regenerated), deleted check.py + video_test.py (Postgres-only cleanup), backend/app/models/book.py + book_tag.py (committed in b5fb6f4 but CRLF line endings show as modified)
+**Uncommitted:** graphify-out/ (auto-regenerated), opencode package files, book.py + book_tag.py (CRLF line ending diffs)
 
 ## Current State
-FastAPI + PostgreSQL backend for an offline library. Auth system fully refactored (Tasks 13-19 done). Book refactor Tasks 2-4 complete — Book model rewritten (2.0 + JSONB + GIN), BookTag cleaned (2.0, is_active dropped), book tables rebuilt in Postgres, Tag model updated to 2.0 style with TYPE_CHECKING guard. 12 of 16 tasks remaining. App is Postgres-only. Opencode tooling configured with 5 MCPs (context7, gh_grep, memory, playwright, sequential-thinking), state skill with commit confirmation trigger, morning briefing automation (fixed: removed --agent general flag, errors now logged to briefing.log).
+FastAPI + PostgreSQL backend for an offline library. Auth system fully refactored (Tasks 13-19 done). Book refactor Tasks 2-4 complete — Book model rewritten (2.0 + JSONB + GIN), BookTag cleaned (2.0, is_active dropped), book tables rebuilt in Postgres, Tag model updated to 2.0 style with TYPE_CHECKING guard. 12 of 16 tasks remaining. App is Postgres-only. Opencode tooling configured with 5 MCPs, state skill, and /todo command for briefings (replaced broken morning briefing automation).
 
 ## In Progress
 - [x] **Task 2: Rewrite Book model** — COMPLETE
@@ -21,8 +21,7 @@ FastAPI + PostgreSQL backend for an offline library. Auth system fully refactore
 - [ ] Configure git credential helper to avoid push hanging on other machine (priority: medium, added: 2026-07-08)
 
 ## Decisions Log
-- 2026-07-12: Fixed morning briefing script — removed `--agent general` flag (was configured as subagent, caused unpredictable fallbacks), changed `2>/dev/null` to `2>"$OUTPUT_DIR/briefing.log"` (errors now visible for debugging). Script now generates clean output reliably.
-- 2026-07-12: Added commit confirmation trigger to state skill — "yes", "commit it", "go ahead", "commit please", "push it" now invoke the state skill for a lighter STATE.md update.
+- 2026-07-12: Replaced morning briefing automation with /todo skill — scheduled scripts were unreliable (opencode run subprocess produced empty output intermittently). New approach: /todo command invokes a skill that generates the briefing directly in-chat. No scripts, no Task Scheduler, no cron. User triggers it when they sit down to code.
 - 2026-07-09: Tag model updated to 2.0 style — `Mapped[]` + `mapped_column()`, string type references in relationships with `TYPE_CHECKING` guard for Pylance/mypy type resolution without circular imports.
 - 2026-07-09: Dropped `is_active` from `BookTag` — dead column, never queried or toggled. Simplifies the junction table to just `id`, `book_id`, `tag_id` + UniqueConstraint.
 - 2026-07-09: Removed `themes` from book refactor plan — `tags` is the single categorization system (subjects + genres in one flat list). Simplified plan from 17 to 16 tasks, eliminated 3 files (theme.py, book_theme.py, theme_schema.py). `metadata_` JSONB remains as extensibility escape hatch.
@@ -37,13 +36,10 @@ FastAPI + PostgreSQL backend for an offline library. Auth system fully refactore
 
 ## Graveyard (Tried & Didn't Work)
 - **Attempt:** `opencode-mem` plugin for cross-session memory — _Why it failed:_ `sharp` native binary not built for linux-x64 in the cached package, AND the OpenAI API key was left as the placeholder `sk-...` from the default config. Both failures were silent (368 errors logged, no user-visible signal). Replaced with Memory MCP which has no native dependencies and no external API.
-- **Attempt:** Morning briefing with `--agent general` flag — _Why it failed:_ `general` agent is configured as `subagent` mode in opencode.json. `opencode run` warned "agent is a subagent, not a primary agent" and fell back unpredictably, sometimes producing no text output. Fixed by removing the flag and using the default agent.
-- **Attempt:** Morning briefing with `2>/dev/null` — _Why it failed:_ Swallowed all stderr including useful error messages, making it impossible to debug empty output. Fixed by redirecting stderr to `todos/briefing.log`.
+- **Attempt:** Morning briefing via `opencode run --format json` subprocess + Windows Task Scheduler — _Why it failed:_ `opencode run` in non-interactive mode produced empty output intermittently. The `--agent general` flag caused subagent fallback warnings. JSON parsing worked in isolation but the full prompt with tool calls (reading files, running git) was unreliable in the subprocess context. Replaced with /todo skill that generates the briefing directly as the agent — no subprocess, no scheduling, no scripts.
 
 ## Next Steps
-1. [ ] Commit uncommitted changes: scripts/morning-briefing.sh fix, AGENTS.md + state skill update, opencode.json MCPs, deleted files (check.py, video_test.py)
-2. [ ] Push to origin
-3. [ ] Task 5: Rewrite book schemas (layered + BookSearchCriteria + Page) — `backend/app/schemas/book_schema.py` + `backend/app/schemas/__init__.py`
-4. [ ] Task 6: Rewrite BookRepo (dynamic search + pagination + 2.0 style) — `backend/app/repositories/book_repo.py`
-5. [ ] Task 7: Create ContentValidator + BookError hierarchy — `backend/app/services/book_errors.py` + `backend/app/services/content_validator.py`
-6. [ ] On Mac: `git pull origin refactor && cat STATE.md` to resume
+1. [ ] Task 5: Rewrite book schemas (layered + BookSearchCriteria + Page) — `backend/app/schemas/book_schema.py` + `backend/app/schemas/__init__.py`
+2. [ ] Task 6: Rewrite BookRepo (dynamic search + pagination + 2.0 style) — `backend/app/repositories/book_repo.py`
+3. [ ] Task 7: Create ContentValidator + BookError hierarchy — `backend/app/services/book_errors.py` + `backend/app/services/content_validator.py`
+4. [ ] On Mac: `git pull origin refactor && cat STATE.md` to resume. Type `/todo` for a briefing.
