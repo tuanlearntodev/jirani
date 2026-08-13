@@ -1,35 +1,56 @@
 # Pydantic Schemas
 # This package contains request/response schemas using Pydantic
 
-from .auth_schema import LoginRequest, ResetPasswordRequest, ChangePasswordRequest, TokenResponse
-from .book_schema import BookBase, BookCreate, BookRead, BookDetail, BookUpload
-from .tag_schema import TagBase, TagRead, TagCreate
-from .account_schema import AccountBase, AccountCreateRequest, AccountRead, BulkCreateRequest, BulkCredentialItem, BulkCreateResponse, AccountCreateResponse
-
+from .account_schema import (
+    AccountBase,
+    AccountCreateRequest,
+    AccountCreateResponse,
+    AccountRead,
+    BulkCreateRequest,
+    BulkCreateResponse,
+    BulkCredentialItem,
+)
+from .auth_schema import (
+    ChangePasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+)
+from .book_schema import (
+    BookBase,
+    BookCreate,
+    BookRead,
+    BookSearchCriteria,
+    BookUpdate,
+    BookUpload,
+    Page,
+)
+from .tag_schema import TagBase, TagCreate, TagRead
 
 __all__ = [
-    # Auth schemas
-    "LoginRequest",
-    "TokenResponse",
-    "ResetPasswordRequest",
-    "ChangePasswordRequest",
-    # Account schemas   
+    # Account schemas
     "AccountBase",
     "AccountCreateRequest",
-    "AccountRead",
-    "BulkCreateRequest",
-    "BulkCredentialItem",
-    "BulkCreateResponse",
     "AccountCreateResponse",
+    "AccountRead",
     # Book schemas
     "BookBase",
     "BookCreate",
     "BookRead",
-    "BookDetail",
+    "BookSearchCriteria",
+    "BookUpdate",
     "BookUpload",
+    "BulkCreateRequest",
+    "BulkCreateResponse",
+    "BulkCredentialItem",
+    # Auth schemas
+    "ChangePasswordRequest",
+    "LoginRequest",
+    "Page",
+    "ResetPasswordRequest",
     # Tag schemas
     "TagBase",
-    "TagRead",
     "TagCreate",
-
+    "TagRead",
+    "TokenResponse",
 ]
