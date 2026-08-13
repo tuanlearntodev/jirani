@@ -10,18 +10,31 @@ Rules:
 - **Design & Debugging:** Suggest architectural designs, propose specific code changes, and outline step-by-step strategies to fix errors. You may provide code snippets in your chat responses for the user to implement, but do not apply them yourself.
 - **Permitted Execution:** The only code you are permitted to write or execute are terminal commands (e.g., build tools, `pytest`, `mypy`, `ruff`) strictly for testing purposes, to check if the codebase runs correctly, and to diagnose issues.
 
-## graphify
+## graphify — MUST USE FIRST
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
-When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+**Required workflow — you MUST follow this order for any codebase question:**
 
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+1. First, run `graphify query "<question>"` (when graphify-out/graph.json exists) to get a scoped subgraph. Do NOT read source files directly until graphify has been consulted.
+2. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
+3. Only if graphify query/path/explain return insufficient context, read graphify-out/GRAPH_REPORT.md for broad architecture review.
+4. Only as a last resort, read source files directly. Never jump to reading source files before checking graphify.
+
+Other rules:
 - Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Cross-Machine Setup
+
+This repo works on macOS, Linux (WSL), and Windows. Require these on any machine:
+
+- **Python env:** `cd backend && uv sync` (creates `.venv`). VS Code auto-discovers `backend/.venv`.
+- **OpenCode config:** `.opencode/opencode.jsonc` is shared and committed. Machine-specific overrides (e.g. native Windows `USERPROFILE` vs `HOME`) belong in your global `~/.config/opencode/opencode.json`.
+- **Tools on PATH:** `graphify`, `bun`, `node`/`npx`, `docker` (for postgres).
+- **Postgres:** `docker compose up -d db`.
 
 ## superpowers
 

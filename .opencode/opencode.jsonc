@@ -1,0 +1,44 @@
+{
+  // Shared project config — portable across machines (macOS, Linux, WSL, Windows).
+  // Machine-specific overrides belong in ~/.config/opencode/opencode.json (global),
+  // which merges with this file per opencode's precedence rules.
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    ".opencode/plugins/graphify.js",
+    "superpowers@git+https://github.com/obra/superpowers.git"
+  ],
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    },
+    "memory": {
+      "type": "local",
+      "command": ["bun", "x", "@modelcontextprotocol/server-memory"],
+      "enabled": true,
+      "environment": {
+        // {env:HOME} resolves on macOS/Linux/WSL/Git Bash.
+        // On native Windows PowerShell/cmd use {env:USERPROFILE} — override in
+        // your global config: ~/.config/opencode/opencode.json
+        "MEMORY_FILE_PATH": "{env:HOME}/.local/share/opencode/memory.jsonl"
+      },
+      "timeout": 10000
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp@latest"],
+      "enabled": true,
+      "timeout": 30000
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true,
+      "timeout": 10000
+    }
+  }
+}
