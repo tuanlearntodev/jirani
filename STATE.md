@@ -1,8 +1,8 @@
 # Project State — Jirani Offline Library Backend
 
-**Last Updated:** 2026-07-12 15:20 (commit 8e64680)
+**Last Updated:** 2026-08-15 (commit 978c9a0)
 **Branch:** refactor
-**Uncommitted:** graphify-out/ (auto-regenerated), opencode package files, book.py + book_tag.py (CRLF line ending diffs)
+**Uncommitted:** .vscode/settings.json (Windows venv path), todos/morning-briefing.md (regenerated), memory.md + morning-briefing.prev.md (deleted)
 
 ## Current State
 FastAPI + PostgreSQL backend for an offline library. Auth system fully refactored (Tasks 13-19 done). Book refactor Tasks 2-4 complete — Book model rewritten (2.0 + JSONB + GIN), BookTag cleaned (2.0, is_active dropped), book tables rebuilt in Postgres, Tag model updated to 2.0 style with TYPE_CHECKING guard. 12 of 16 tasks remaining. App is Postgres-only. Opencode tooling configured with 5 MCPs, state skill, and /todo command for briefings (replaced broken morning briefing automation).
@@ -12,7 +12,8 @@ FastAPI + PostgreSQL backend for an offline library. Auth system fully refactore
 - [x] **Task 3: Clean up BookTag** — COMPLETE
 - [x] **Task 4: Drop and rebuild book tables** — COMPLETE (verified in Postgres: new schema, GIN index, no file_type, no is_active)
 - [x] **Tag model updated to 2.0 style** — COMPLETE (bonus cleanup, not a plan task)
-- [ ] Tasks 5-16 of the book refactor plan
+- [x] **Task 5: Rewrite book schemas** — COMPLETE (commit ec4495a: layered Base→Create→Read→Update, BookSearchCriteria, PEP 695 Page[T])
+- [ ] Tasks 6-16 of the book refactor plan
 
 ## Remind Me (Future)
 - [ ] Set up Alembic migrations (replaces manual DROP TABLE workflow) (priority: low, added: 2026-07-08)
@@ -21,6 +22,7 @@ FastAPI + PostgreSQL backend for an offline library. Auth system fully refactore
 - [ ] Configure git credential helper to avoid push hanging on other machine (priority: medium, added: 2026-07-08)
 
 ## Decisions Log
+- 2026-08-15: Reverted working-tree schema regression back to HEAD — the working tree had reintroduced undefined `BookDetail` references (ImportError on `import app.schemas`), downgraded `Page[T]` from PEP 695 to `Generic[T]`, swapped quote/annotation style, and accidentally dropped mypy+ast-serialize from uv.lock (lock was then inconsistent with pyproject dev-deps). Since the committed refactor (ec4495a) was the intended end state, restored all of `backend/` to HEAD rather than re-fixing the broken files. Graph refreshed after revert (978c9a0, 450 nodes / 756 edges).
 - 2026-07-12: Replaced morning briefing automation with /todo skill — scheduled scripts were unreliable (opencode run subprocess produced empty output intermittently). New approach: /todo command invokes a skill that generates the briefing directly in-chat. No scripts, no Task Scheduler, no cron. User triggers it when they sit down to code.
 - 2026-07-09: Tag model updated to 2.0 style — `Mapped[]` + `mapped_column()`, string type references in relationships with `TYPE_CHECKING` guard for Pylance/mypy type resolution without circular imports.
 - 2026-07-09: Dropped `is_active` from `BookTag` — dead column, never queried or toggled. Simplifies the junction table to just `id`, `book_id`, `tag_id` + UniqueConstraint.
@@ -39,7 +41,8 @@ FastAPI + PostgreSQL backend for an offline library. Auth system fully refactore
 - **Attempt:** Morning briefing via `opencode run --format json` subprocess + Windows Task Scheduler — _Why it failed:_ `opencode run` in non-interactive mode produced empty output intermittently. The `--agent general` flag caused subagent fallback warnings. JSON parsing worked in isolation but the full prompt with tool calls (reading files, running git) was unreliable in the subprocess context. Replaced with /todo skill that generates the briefing directly as the agent — no subprocess, no scheduling, no scripts.
 
 ## Next Steps
-1. [ ] Task 5: Rewrite book schemas (layered + BookSearchCriteria + Page) — `backend/app/schemas/book_schema.py` + `backend/app/schemas/__init__.py`
-2. [ ] Task 6: Rewrite BookRepo (dynamic search + pagination + 2.0 style) — `backend/app/repositories/book_repo.py`
+1. [x] Task 5: Rewrite book schemas — DONE (ec4495a); subsequent regression reverted + graph refreshed (978c9a0)
+2. [ ] Task 6: Rewrite BookRepo (dynamic search from criteria + pagination + 2.0 style) — `backend/app/repositories/book_repo.py`
 3. [ ] Task 7: Create ContentValidator + BookError hierarchy — `backend/app/services/book_errors.py` + `backend/app/services/content_validator.py`
-4. [ ] On Mac: `git pull origin refactor && cat STATE.md` to resume. Type `/todo` for a briefing.
+4. [ ] Later tasks: shrink book_service into 5 modules (storage/cover/validator/epub-meta), rewrite book_router with RoleChecker + pagination + tests
+5. [ ] On Mac: `git pull origin refactor && cat STATE.md` to resume. Type `/todo` for a briefing.
