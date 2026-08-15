@@ -41,7 +41,12 @@ class AuthService:
         elif context == "self_change" and role == RoleEnum.student:
             if not password.isdigit() or len(password) < 4:
                 raise ValueError("Password must be a 4-digit number for students.")
-        elif context == "create" and role in [RoleEnum.teacher, RoleEnum.admin] or context == "self_change" and role in [RoleEnum.teacher, RoleEnum.admin]:
+        elif (
+            context == "create"
+            and role in [RoleEnum.teacher, RoleEnum.admin]
+            or context == "self_change"
+            and role in [RoleEnum.teacher, RoleEnum.admin]
+        ):
             if len(password) < 8:
                 raise ValueError(
                     "Password must be at least 8 characters long for teachers and admins."

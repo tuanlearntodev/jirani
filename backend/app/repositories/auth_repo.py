@@ -1,4 +1,4 @@
-
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Account, RoleEnum
@@ -9,12 +9,14 @@ class AuthRepo:
         self.db_session = db_session
 
     def get_by_username(self, username: str) -> Account | None:
-        return (
-            self.db_session.query(Account).filter(Account.username == username).first()
-        )
+        return self.db_session.scalars(
+            select(Account).where(Account.username == username)
+        ).first()
 
     def get_by_id(self, account_id: int) -> Account | None:
-        return self.db_session.query(Account).filter(Account.id == account_id).first()
+        return self.db_session.scalars(
+            select(Account).where(Account.id == account_id)
+        ).first()
 
     def create_account(self, account: Account) -> Account:
         self.db_session.add(account)
@@ -23,16 +25,16 @@ class AuthRepo:
         return account
 
     def get_all_users(self, role: RoleEnum | None = None) -> list[Account]:
-        query = self.db_session.query(Account)
+        stmt = select(Account)
         if role is not None:
-            query = query.filter(Account.role == role)
-        return query.all()
+            stmt = stmt.where(Account.role == role)
+        return list(self.db_session.scalars(stmt))
 
     def has_admin(self) -> bool:
         return (
-            self.db_session.query(Account)
-            .filter(Account.role == RoleEnum.admin)
-            .first()
+            self.db_session.scalars(
+                select(Account).where(Account.role == RoleEnum.admin).limit(1)
+            ).first()
             is not None
         )
 
@@ -44,10 +46,10 @@ class AuthRepo:
         return account
 
     def get_next_prefix_number(self, prefix: str) -> int:
-        accounts = (
-            self.db_session.query(Account)
-            .filter(Account.username.like(f"{prefix}%"))
-            .all()
+        accounts = list(
+            self.db_session.scalars(
+                select(Account).where(Account.username.like(f"{prefix}%"))
+            )
         )
         numbers = []
         for account in accounts:
