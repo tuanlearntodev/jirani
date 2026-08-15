@@ -1,8 +1,8 @@
 # Project State — Jirani Offline Library Backend
 
-**Last Updated:** 2026-08-15 (commit 978c9a0)
+**Last Updated:** 2026-08-15 (commit da5c638)
 **Branch:** refactor
-**Uncommitted:** .vscode/settings.json (Windows venv path), todos/morning-briefing.md (regenerated), memory.md + morning-briefing.prev.md (deleted)
+**Uncommitted:** clean
 
 ## Current State
 FastAPI + PostgreSQL backend for an offline library. Auth system fully refactored (Tasks 13-19 done). Book refactor Tasks 2-4 complete — Book model rewritten (2.0 + JSONB + GIN), BookTag cleaned (2.0, is_active dropped), book tables rebuilt in Postgres, Tag model updated to 2.0 style with TYPE_CHECKING guard. 12 of 16 tasks remaining. App is Postgres-only. Opencode tooling configured with 5 MCPs, state skill, and /todo command for briefings (replaced broken morning briefing automation).
