@@ -22,6 +22,7 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
 4. Only as a last resort, read source files directly. Never jump to reading source files before checking graphify.
 
 Other rules:
+- graphify-out/ is gitignored (generated artifacts). On a fresh clone, run `graphify update .` once before querying; regenerate with the same command after code changes.
 - Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
