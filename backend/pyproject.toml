@@ -26,4 +26,5 @@ dev = [
     "mypy",
     "pytest",
     "ruff",
+    "testcontainers[postgres]>=4.9.1",
 ]
