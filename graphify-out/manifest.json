@@ -1,292 +1,297 @@
 {
-  ".opencode/opencode.json": {
-    "mtime": 1781838318.2299166,
-    "ast_hash": "c9e7a6dbe65b966f032666093a1e2c38",
-    "semantic_hash": ""
-  },
   ".opencode/package.json": {
-    "mtime": 1781838455.0385654,
+    "mtime": 1786776300.017018,
     "ast_hash": "3c9679bfc33f414fac06b8b4daf71a35",
     "semantic_hash": ""
   },
   ".opencode/plugins/graphify.js": {
-    "mtime": 1781838654.2900796,
+    "mtime": 1786776300.0172327,
     "ast_hash": "64ccd3c03dbfe0980b6095766f5c4e52",
     "semantic_hash": ""
   },
   ".vscode/settings.json": {
-    "mtime": 1781832620.9677577,
-    "ast_hash": "2b361184cee5a4f914d404bd23280e4a",
+    "mtime": 1786776300.2410264,
+    "ast_hash": "531d2f677a1c838242671c971ebeb79c",
     "semantic_hash": ""
   },
   "backend/app/__init__.py": {
-    "mtime": 1781832620.9691603,
+    "mtime": 1786777425.0967681,
     "ast_hash": "7797eca2e96524b465ba2e8dee327a4d",
     "semantic_hash": ""
   },
   "backend/app/api/__init__.py": {
-    "mtime": 1781832620.9695141,
+    "mtime": 1786777425.0969334,
     "ast_hash": "4e65d3b39009c912a99b88641058442c",
     "semantic_hash": ""
   },
   "backend/app/api/audio_router.py": {
-    "mtime": 1781832620.9696405,
+    "mtime": 1786777425.0973387,
     "ast_hash": "2ddd71ddc83c50b6074cb1531410306c",
     "semantic_hash": ""
   },
   "backend/app/api/auth_router.py": {
-    "mtime": 1781842380.4176824,
+    "mtime": 1786777425.0975351,
     "ast_hash": "797fa6e2d7e0b1b7eabb53671faff02b",
     "semantic_hash": ""
   },
   "backend/app/api/book_router.py": {
-    "mtime": 1781832620.970681,
+    "mtime": 1786777425.0977507,
     "ast_hash": "9a96c6a2493cb5bdd43abc725459a294",
     "semantic_hash": ""
   },
   "backend/app/api/setup_router.py": {
-    "mtime": 1781832620.970944,
+    "mtime": 1786777425.0978668,
     "ast_hash": "ac6253c528da3a85d346110588af2604",
     "semantic_hash": ""
   },
   "backend/app/api/tag_router.py": {
-    "mtime": 1781832620.971014,
+    "mtime": 1786777425.0979884,
     "ast_hash": "25e09e5d960d8cbfe3e685d1cd447614",
     "semantic_hash": ""
   },
   "backend/app/api/video_router.py": {
-    "mtime": 1781832620.9711165,
+    "mtime": 1786777425.0993824,
     "ast_hash": "35cb83f7d9832e3c0d75a69d43688482",
     "semantic_hash": ""
   },
-  "backend/app/check.py": {
-    "mtime": 1781832620.9711916,
-    "ast_hash": "192fd2339675bea19c1f8d2b8da52dab",
-    "semantic_hash": ""
-  },
   "backend/app/config.py": {
-    "mtime": 1781832620.9714108,
-    "ast_hash": "e271e2c2e0c575afcf3dada09526af85",
+    "mtime": 1786777425.0996244,
+    "ast_hash": "889eae4a014436c956b78ee621975f29",
     "semantic_hash": ""
   },
   "backend/app/database.py": {
-    "mtime": 1781832620.97174,
+    "mtime": 1786777425.099797,
     "ast_hash": "9237389d10eef7f2ed287873c3caf150",
     "semantic_hash": ""
   },
   "backend/app/dependencies/auth.py": {
-    "mtime": 1781832620.9720361,
+    "mtime": 1786777425.100021,
     "ast_hash": "0e4b88a00c9e6557e7247b6daa19937f",
     "semantic_hash": ""
   },
   "backend/app/main.py": {
-    "mtime": 1781832620.9722679,
+    "mtime": 1786777425.1001766,
     "ast_hash": "9963fdd8d4b47ad83936112575d622dd",
     "semantic_hash": ""
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1781832620.972595,
+    "mtime": 1786777425.1003602,
     "ast_hash": "294498d987df9feb968c13c820523e75",
     "semantic_hash": ""
   },
   "backend/app/models/account.py": {
-    "mtime": 1781832620.972893,
+    "mtime": 1786777425.1005013,
     "ast_hash": "bfff4a32bce805a4a17abd1f79ef18f3",
     "semantic_hash": ""
   },
   "backend/app/models/audio.py": {
-    "mtime": 1781832620.972973,
+    "mtime": 1786777425.1006439,
     "ast_hash": "acc8db380344d306397043601e2da411",
     "semantic_hash": ""
   },
   "backend/app/models/audio_tag.py": {
-    "mtime": 1781832620.9730592,
+    "mtime": 1786777425.1007884,
     "ast_hash": "10b83b064d2f8a6af0148c1863d055ec",
     "semantic_hash": ""
   },
   "backend/app/models/base.py": {
-    "mtime": 1781832620.9734406,
+    "mtime": 1786777425.1009274,
     "ast_hash": "b69a6d6b8b472bef2577257ba631541b",
     "semantic_hash": ""
   },
   "backend/app/models/book.py": {
-    "mtime": 1781832620.9738455,
-    "ast_hash": "58e454cf3846f4332657094ebe4e5d0a",
+    "mtime": 1786777425.1010609,
+    "ast_hash": "157476527bfb3524b4a095d2628be946",
     "semantic_hash": ""
   },
   "backend/app/models/book_tag.py": {
-    "mtime": 1781832620.9743242,
-    "ast_hash": "7f7b158f330bf6e6131239a8af3456f1",
+    "mtime": 1786777425.1011937,
+    "ast_hash": "7ccd6c1130bbc02ad9773e99be9911ac",
     "semantic_hash": ""
   },
   "backend/app/models/role_enum.py": {
-    "mtime": 1781832620.9745548,
+    "mtime": 1786777425.1013582,
     "ast_hash": "541c8c9d25da8f1833bf0fd80c8e3cfd",
     "semantic_hash": ""
   },
   "backend/app/models/tag.py": {
-    "mtime": 1781832620.974829,
-    "ast_hash": "967a7fcb8b321d55f65d24c9c1a4ca01",
+    "mtime": 1786777425.1015005,
+    "ast_hash": "f9513296c42230a9790eff721394f57d",
     "semantic_hash": ""
   },
   "backend/app/models/video.py": {
-    "mtime": 1781832620.9749038,
+    "mtime": 1786777425.1016397,
     "ast_hash": "9bfc5598d4145a18f5f43b64cdac4dac",
     "semantic_hash": ""
   },
   "backend/app/models/video_tag.py": {
-    "mtime": 1781832620.9749758,
+    "mtime": 1786777425.101772,
     "ast_hash": "927095c64fa64a707b5de4e51ccc8f8f",
     "semantic_hash": ""
   },
   "backend/app/repositories/__init__.py": {
-    "mtime": 1781832620.975413,
+    "mtime": 1786777425.1019151,
     "ast_hash": "ad68e28682a76e0e262fbb22f8d74370",
     "semantic_hash": ""
   },
   "backend/app/repositories/audio_repo.py": {
-    "mtime": 1781832620.9755018,
+    "mtime": 1786777425.102053,
     "ast_hash": "f802a5e824ef52b187a1ed628fd80a0f",
     "semantic_hash": ""
   },
   "backend/app/repositories/auth_repo.py": {
-    "mtime": 1781840455.374787,
+    "mtime": 1786777425.1021774,
     "ast_hash": "deb0a588180b7623a760e0685e6c6607",
     "semantic_hash": ""
   },
   "backend/app/repositories/book_repo.py": {
-    "mtime": 1781832620.9761286,
+    "mtime": 1786777425.1024306,
     "ast_hash": "02d4aed028a1ec3bed87297f1f2d0172",
     "semantic_hash": ""
   },
   "backend/app/repositories/tag_repo.py": {
-    "mtime": 1781832620.9763775,
+    "mtime": 1786777425.1025686,
     "ast_hash": "ec6d0674dbda07a8f43f393d7ffcfda0",
     "semantic_hash": ""
   },
   "backend/app/repositories/video_repo.py": {
-    "mtime": 1781832620.9764645,
+    "mtime": 1786777425.102729,
     "ast_hash": "a0f69cd073495b8643a3f7ab0a23a05e",
     "semantic_hash": ""
   },
   "backend/app/schemas/__init__.py": {
-    "mtime": 1781839955.9397764,
-    "ast_hash": "80639a14222f2c0ba10fb225c9a59dae",
+    "mtime": 1786777291.2236698,
+    "ast_hash": "6018e3316d7dc9925ed24792855bfcac",
     "semantic_hash": ""
   },
   "backend/app/schemas/account_schema.py": {
-    "mtime": 1781840837.9445271,
-    "ast_hash": "451cc5f2b9e61a15af9f83df693a0ecf",
+    "mtime": 1786777291.224011,
+    "ast_hash": "d9e112310e5986f3a20e3bbd5b302f25",
     "semantic_hash": ""
   },
   "backend/app/schemas/audio_schema.py": {
-    "mtime": 1781832620.97713,
-    "ast_hash": "89e2b03fbc93244891f6f6e20efa1545",
+    "mtime": 1786777291.2243993,
+    "ast_hash": "dba2964d57cce07b246ccf34f14152d8",
     "semantic_hash": ""
   },
   "backend/app/schemas/auth_schema.py": {
-    "mtime": 1781839634.3775325,
-    "ast_hash": "03b5f054a90a413a569ab4d0694f2f59",
-    "semantic_hash": ""
-  },
-  "backend/app/schemas/base_schema.py": {
-    "mtime": 1781832620.9782295,
-    "ast_hash": "c3c3eaf08d3367ee2c09bc64f4c442fa",
+    "mtime": 1786777291.2247684,
+    "ast_hash": "16efed3aefd2a6d330e9394288b020e2",
     "semantic_hash": ""
   },
   "backend/app/schemas/book_schema.py": {
-    "mtime": 1781832620.9786313,
-    "ast_hash": "4f1a20918dfa46fbf3b91e8a9c034f1b",
+    "mtime": 1786777291.2251184,
+    "ast_hash": "17fbec433588dc1ffc9535a400f6143a",
     "semantic_hash": ""
   },
   "backend/app/schemas/tag_schema.py": {
-    "mtime": 1781832620.9788268,
-    "ast_hash": "e653e5ff9fa5be25549cb06dfc92ceab",
+    "mtime": 1786777291.2253973,
+    "ast_hash": "35135c8988ad78b19a5973b02af97f3a",
     "semantic_hash": ""
   },
   "backend/app/schemas/video_schema.py": {
-    "mtime": 1781832620.9789007,
-    "ast_hash": "23c02ef8dea333c3150f2ab262b2283e",
+    "mtime": 1786777291.2256887,
+    "ast_hash": "f374b6daa7685dc89743b7e50e285c80",
     "semantic_hash": ""
   },
   "backend/app/services/__init__.py": {
-    "mtime": 1781832620.9791286,
+    "mtime": 1786777425.10289,
     "ast_hash": "6258da89bfc90e4bbb6e191bc1fefbe7",
     "semantic_hash": ""
   },
   "backend/app/services/auth_service.py": {
-    "mtime": 1781842138.087222,
+    "mtime": 1786777425.10318,
     "ast_hash": "b72e7530f4fdb177763ef3882a0bdcca",
     "semantic_hash": ""
   },
   "backend/app/services/book_service.py": {
-    "mtime": 1781832620.9799588,
-    "ast_hash": "ad9faad196dddb7281019718983e14de",
-    "semantic_hash": ""
-  },
-  "backend/app/tests/video_test.py": {
-    "mtime": 1781832620.9802494,
-    "ast_hash": "9d14f0adb41d789a35e3e100a9ee4ab9",
+    "mtime": 1786777291.2262864,
+    "ast_hash": "4bcd8188ee5e3991c275ddbf7d791d47",
     "semantic_hash": ""
   },
   "docker/entrypoint.sh": {
-    "mtime": 1781832620.9825938,
+    "mtime": 1786776300.0336938,
     "ast_hash": "224b640824d9667bf7cbead5974992fb",
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1781838654.2898998,
-    "ast_hash": "52b399eed2e03e6f7ce1e7a6bbd52291",
+    "mtime": 1786776731.9878266,
+    "ast_hash": "0ae11f6557af50dbe385b05c0e122cbe",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1781832620.9681625,
+    "mtime": 1786776300.020859,
     "ast_hash": "85be58b94a8ccc9d6e0468ea61aef5e4",
     "semantic_hash": ""
   },
   "backend/requirements.txt": {
-    "mtime": 1781832620.98075,
+    "mtime": 1786776300.0322175,
     "ast_hash": "f168aed3d67e854ad661958cc23c8c87",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1781832620.9822934,
+    "mtime": 1786776300.0335817,
     "ast_hash": "966ec3c90c5603543a8f96e1d6699f67",
     "semantic_hash": ""
   },
   "docs/plans/2026-06-02-auth-redesign-plan.md": {
-    "mtime": 1781838009.0813334,
+    "mtime": 1786777425.1037166,
     "ast_hash": "1e34c8f891a9a88f188012246cb32930",
     "semantic_hash": ""
   },
   "docs/specs/2026-06-02-auth-redesign-design.md": {
-    "mtime": 1781832620.9834387,
+    "mtime": 1786776300.0349915,
     "ast_hash": "f3539f4ff5970224e3806196d0c9f160",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-05-26-monorepo-restructure.md": {
-    "mtime": 1781838318.2310758,
+    "mtime": 1786776300.0356808,
     "ast_hash": "39613f9306f192ff6792674676972a0e",
     "semantic_hash": ""
   },
   "docs/superpowers/specs/2026-05-02-docker-entrypoint-uploads-design.md": {
-    "mtime": 1781838318.2312973,
+    "mtime": 1786776300.0358589,
     "ast_hash": "1bb94a4ec3a8ec08b31fb3611c8100dc",
     "semantic_hash": ""
   },
   "docs/superpowers/specs/2026-05-26-monorepo-restructure-design.md": {
-    "mtime": 1781838318.2316191,
+    "mtime": 1786776300.035973,
     "ast_hash": "2cf5ad861827d287e1b362e7d56f4206",
     "semantic_hash": ""
   },
   "docs/superpowers/specs/2026-06-04-mass-account-creation-design.md": {
-    "mtime": 1781832620.9841158,
+    "mtime": 1786777425.1043477,
     "ast_hash": "6d97b82a4dfeae94dcb86913f5578719",
     "semantic_hash": ""
   },
-  "memory.md": {
-    "mtime": 1781832620.9846463,
-    "ast_hash": "7f12c7c0ea1f1684303f86ff0e383af3",
+  ".opencode/skills/state/SKILL.md": {
+    "mtime": 1786776300.0176868,
+    "ast_hash": "f47cb7a0fb8a106959aad07db6043959",
+    "semantic_hash": ""
+  },
+  ".opencode/skills/todo/SKILL.md": {
+    "mtime": 1786776300.0179455,
+    "ast_hash": "9ba7b856a1b9a2595821e7c28d013fb5",
+    "semantic_hash": ""
+  },
+  "STATE.md": {
+    "mtime": 1786776300.0210567,
+    "ast_hash": "9f740bebc239c5642e6ba2eb2e0a2bee",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-07-03-book-refactor-plan.md": {
+    "mtime": 1786777425.1040635,
+    "ast_hash": "2cc12f60067ad9c9265d2765dac9365d",
+    "semantic_hash": ""
+  },
+  "docs/specs/2026-07-03-book-refactor-design.md": {
+    "mtime": 1786776300.03552,
+    "ast_hash": "7eaca958586407464f3151436af0204e",
+    "semantic_hash": ""
+  },
+  "todos/morning-briefing.md": {
+    "mtime": 1786776300.060472,
+    "ast_hash": "4088624848ce8707dc6925f63a155413",
     "semantic_hash": ""
   }
 }
