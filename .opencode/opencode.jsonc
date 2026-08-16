@@ -40,5 +40,37 @@
       "enabled": true,
       "timeout": 10000
     }
+  },
+  // Enforces the advisory operating mode declared in AGENTS.md.
+  // Prose in AGENTS.md is a request; this block is the actual boundary.
+  // NOTE: within each object the LAST matching rule wins — broad patterns
+  // first, narrow exceptions after.
+  "permission": {
+    "edit": {
+      "*": "allow",
+      // Application source and infrastructure — the agent advises, you implement.
+      "backend/app/**": "deny",
+      "backend/pyproject.toml": "deny",
+      "backend/uv.lock": "deny",
+      "backend/Dockerfile": "deny",
+      "backend/alembic.ini": "deny",
+      "backend/migrations/**": "deny",
+      "docker-compose.yml": "deny",
+      "docker/**": "deny"
+    },
+    "bash": {
+      "*": "allow",
+      // History-rewriting or destructive operations always confirm first.
+      "git commit*": "ask",
+      "git push*": "ask",
+      "git reset*": "ask",
+      "git checkout*": "ask",
+      "git rm*": "ask",
+      "rm *": "ask",
+      "docker compose down*": "ask",
+      "psql*": "ask",
+      "uv add*": "ask",
+      "uv remove*": "ask"
+    }
   }
 }
