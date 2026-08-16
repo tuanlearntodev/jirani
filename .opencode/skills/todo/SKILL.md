@@ -24,7 +24,23 @@ Generate a project briefing that shows:
 
 1. **Read STATE.md** (repo root) — current project state, in-progress tasks, reminders, next steps.
 
-2. **Read the plan** — `docs/plans/2026-07-03-book-refactor-plan.md`. Check which tasks have `[x]` vs `[ ]` to see progress.
+2. **Find the active plans.** There are TWO plan trees and both are live — never assume one:
+
+   ```bash
+   ls docs/plans/ docs/superpowers/plans/
+   ```
+
+   For each plan file, count progress instead of reading the whole thing (these files run to thousands of lines):
+
+   ```bash
+   for f in docs/plans/*.md docs/superpowers/plans/*.md; do
+     echo "$f: $(grep -c '^\- \[x\]' "$f") done / $(grep -c '^\- \[ \]' "$f") open"
+   done
+   ```
+
+   A plan with zero `[x]` and many `[ ]` has not been started. A plan with no open items is finished — skip it. Read only the sections around the first unchecked box of each plan that still has open work.
+
+   As of 2026-08-15 two plans are in flight: `docs/plans/2026-07-03-book-refactor-plan.md` (Tasks 6-16 open) and `docs/superpowers/plans/2026-08-15-codebase-hygiene.md` (not started). Verify this with the command above rather than trusting this line.
 
 3. **Run `git log --oneline -20`** — see recent commits to understand what was recently completed.
 
@@ -41,19 +57,21 @@ Generate a project briefing that shows:
 <Any planned steps that were NOT completed. If nothing is overdue, write "Nothing overdue. Good job.">
 
 ## Done So Far
-<List of completed tasks based on plan checkboxes + git commits>
+<Completed tasks from plan checkboxes + git commits. Name which plan each belongs to.>
 
 ## Next Up
-<The next incomplete task from the plan. Include task number and title.>
+<The next incomplete task. Name the plan file AND the task number/title, since more
+than one plan is active — "Task 6" alone is ambiguous across two plans.>
 
 ## Today's Plan (30 min)
-<Break the next task into 3-5 concrete steps with verify commands. Use checkboxes.>
+<Break the next task into 3-5 concrete steps with verify commands. Use checkboxes.
+Verify commands run from backend/ and start with `uv run` — see AGENTS.md.>
 
 ## Reminders
 <Items from STATE.md "Remind Me (Future)" section>
 
 ## Blockers / Warnings
-<Uncommitted changes, stuck tasks, missing dependencies>
+<Uncommitted changes, stuck tasks, missing dependencies, invariant violations>
 ```
 
 7. **Save the briefing** to `todos/morning-briefing.md` (overwrite). Save the previous one to `todos/morning-briefing.prev.md` first if it exists.
@@ -64,6 +82,9 @@ Generate a project briefing that shows:
 
 - Keep it concise — this is read before starting work, not a dissertation
 - Use checkboxes (`- [ ]`) in Today's Plan so the next briefing can check what got done
-- If STATE.md doesn't exist, say so and work from git log + plan only
-- If the plan file doesn't exist, work from STATE.md + git log only
+- If STATE.md doesn't exist, say so and work from git log + plans only
+- If no plan file exists, work from STATE.md + git log only
 - Always save to `todos/morning-briefing.md` even if also showing in chat
+- **Never hardcode a plan path.** Discover plans by listing both trees. A hardcoded path silently goes stale the moment a plan is added, renamed, or finished.
+- **Two plans are active.** Always say which plan a task belongs to. Never merge their task numbers into one list.
+- When STATE.md and the plan checkboxes disagree, trust the checkboxes and flag the drift under Blockers.

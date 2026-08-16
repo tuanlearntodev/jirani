@@ -23,7 +23,7 @@ Trigger on any of these signals from the user:
 
 ### On task completion
 
-1. Run verification commands if not already done (per AGENTS.md: `ruff format .`, `ruff check . --fix`, `mypy . --strict`, `pytest -v -k "<module>"`).
+1. Run the verification commands if not already done. **Do not copy them from here** — read the "Build & Test Commands (Definition of Done)" section of `AGENTS.md` and run exactly what it specifies. They run from `backend/` and are prefixed with `uv run`; a bare `pytest` or `ruff` resolves against system PATH instead of `backend/.venv` and will either fail or lint the wrong environment.
 2. Read the current `STATE.md` (or create it if missing using the template below).
 3. Update the header: `Last Updated` (current timestamp), `Branch` (`git branch --show-current`), `Uncommitted` (`git status --porcelain` output or "clean").
 4. Refresh `## Current State` with 2-3 sentences on what works, what's deployed, current health.
@@ -96,3 +96,6 @@ If `STATE.md` does not exist, create it with this structure:
 - `## Remind Me` entries can be removed when completed, but only after the user confirms.
 - Always update the `Last Updated` header, even for small changes.
 - If STATE.md is not committed, remind the user to commit it so it survives machine switches.
+- **Never restate the Definition of Done commands in this file.** Read them from `AGENTS.md` at run time. A second copy drifts from the first — that is exactly how this skill ended up citing four commands that no longer worked.
+- **Two plan trees are active** (`docs/plans/` and `docs/superpowers/plans/`). When recording progress, name the plan file — a bare task number is ambiguous.
+- Record any newly discovered violation of the six binding invariants in `AGENTS.md` under Decisions Log or Remind Me, so it is not rediscovered next session.
