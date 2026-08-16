@@ -12,7 +12,7 @@ FastAPI + PostgreSQL backend for an offline library. Auth refactor done; book re
 - [x] **Test harness** — COMPLETE (361bb48: testcontainers `postgres:16-alpine`, session-scoped, fixtures + helpers)
 - [x] **AuthRepo → SQLAlchemy 2.0** — COMPLETE (a034adf)
 - [x] **AGENTS.md rewrite** — COMPLETE (six binding invariants, scoped advisory mode, corrected DoD commands)
-- [ ] **Book refactor Tasks 6-16** — `docs/plans/2026-07-03-book-refactor-plan.md`
+- [ ] **Book refactor** — `docs/superpowers/plans/2026-08-16-book-refactor.md`, Tasks 0-6 (revision of the deleted 2026-07-03 plan)
 - [ ] **Codebase hygiene plan** — `docs/superpowers/plans/2026-08-15-codebase-hygiene.md`, 9 tasks, none started
 
 ## Remind Me (Future)
@@ -22,7 +22,7 @@ FastAPI + PostgreSQL backend for an offline library. Auth refactor done; book re
 - [ ] Configure git credential helper to avoid push hanging on other machine (priority: medium, added: 2026-07-08)
 - [ ] Give `audio`/`video`/`tag` a service layer — routers do inline DB access and tag logic (priority: medium, added: 2026-08-15) — **invariant 1 violation**, not covered by either active plan
 - [ ] Restart opencode so the rewritten AGENTS.md, the new `permission` block, and the three subagents load — config is read once at startup, not hot-reloaded (priority: high, added: 2026-08-15)
-- [ ] Tick the completed checkboxes in `docs/plans/2026-07-03-book-refactor-plan.md` (Tasks 2-5 landed in `ec4495a` but all 65 boxes read unchecked) — until then `/next` will report the plan as not started (priority: medium, added: 2026-08-15)
+- [ ] ~~Tick the completed checkboxes in docs/plans/2026-07-03~~ — resolved differently: the old book plan was **deleted** on 2026-08-16 (superseded by `docs/superpowers/plans/2026-08-16-book-refactor.md`); no boxes left to tick
 - [ ] Consider `"enabled": false` on the `playwright` MCP — it costs tool-description tokens in every request and this is a backend with no UI yet (priority: low, added: 2026-08-15)
 - [ ] Create `~/.config/opencode/opencode.json` for machine-specific overrides (e.g. `{env:USERPROFILE}` instead of `{env:HOME}` for the memory MCP path on native Windows) (priority: low, added: 2026-08-15)
 
@@ -36,6 +36,7 @@ Tracked so they shrink instead of becoming permanent. Four close when the hygien
 - [ ] **Inv 6 — naming:** `Audio_Repo`, `Video_Repo`, `Audio_Create`, `Video_Create` *(no plan covers this)*
 
 ## Decisions Log
+- 2026-08-16: **Deleted the entire `docs/plans/` and `docs/specs/` trees (4 files).** The auth-redesign pair (2026-06-02) was fully executed — all 19 tasks committed, confirmed via git history; the checkboxes were simply never ticked. The book-refactor pair (2026-07-03) was superseded by the approved 2026-08-16 revision. Note: the 2026-08-16 spec's own instruction was to *mark* the old plan superseded, not delete it — I recommended deleting anyway, and the user agreed, because git history is the archive (`git log --follow -- docs/plans/<file>`) and a working tree should only contain plans that are safe to execute. The old plan carried documented-wrong instructions (GIN index on the Python attr, `joinedload`+`LIMIT`, deprecated `asyncio.get_event_loop`, wrong line counts/column widths) that a subagent could otherwise pick up and trust. Net: one plan tree (`docs/superpowers/`), and all tooling (todo skill, plan-auditor, state skill, /next) updated to match.
 - 2026-08-15: **Subagent model assignments: match model to judgment, not to prestige.** `coder`, `verifier`, and `plan-auditor` run `opencode/deepseek-v4-flash` (paid tier — OpenCode auto-routes it to max effort, and these agents do no real reasoning so cheap is correct). `invariant-auditor` runs `opencode/kimi-k3` because it is the only subagent doing genuine judgment — distinguishing a *new* invariant violation from the pre-existing debt AGENTS.md already lists. A weak auditor either false-alarms on everything (you learn to ignore it) or misses real violations (worse). Note: there is no "flash v4 max" model id — the options are `-flash`, `-flash-free`, `-pro`; "max mode" is a routing behavior of the paid `-flash` tier, not a separate model.
 - 2026-08-15: **Added a `coder` subagent for cost-splitting implementation.** Runs `opencode/deepseek-v4-flash`, edits `backend/app/**` only (build files, migrations, docs, and `.opencode` stay denied). Rationale: the strong model designs and writes a complete self-contained "CODER BRIEF" (goal, files with exact code, a verify command, invariants); the cheap model applies it verbatim and runs the verify command. The cost saving comes from the cheap model doing zero reasoning — because it starts cold with no conversation history, every judgment must already be in the brief. A vague brief makes the cheap model improvise, which costs more in rework than it saves. Wired into AGENTS.md with the brief contract + a `/coder` command that takes the brief as `$ARGUMENTS`.
 - 2026-08-15: **Advisory mode is now enforced by config, not just documented.** Added a `permission` block to `.opencode/opencode.jsonc`: `edit` denied on `backend/app/**`, `backend/pyproject.toml`, `backend/uv.lock`, `backend/Dockerfile`, `backend/alembic.ini`, `backend/migrations/**`, `docker-compose.yml`, `docker/**`; `bash` set to `ask` for `git commit|push|reset|checkout|rm`, `rm`, `docker compose down`, `psql`, `uv add|remove`. Rationale: AGENTS.md prose is a request the model can ignore; the permission block is the actual boundary. Note that within each object the LAST matching rule wins, so `"*": "allow"` is listed first and denials after.
@@ -66,11 +67,11 @@ Tracked so they shrink instead of becoming permanent. Four close when the hygien
 - **Attempt:** Morning briefing via `opencode run --format json` subprocess + Windows Task Scheduler — _Why it failed:_ `opencode run` in non-interactive mode produced empty output intermittently. The `--agent general` flag caused subagent fallback warnings. JSON parsing worked in isolation but the full prompt with tool calls (reading files, running git) was unreliable in the subprocess context. Replaced with /todo skill that generates the briefing directly as the agent — no subprocess, no scheduling, no scripts.
 
 ## Next Steps
-1. [ ] **Review + commit the uncommitted work**: `AGENTS.md`, both skill files, and the hygiene plan. Restart opencode afterwards so the new AGENTS.md loads.
-2. [ ] **Decide which plan runs first** — two are in flight and they overlap:
-   - `docs/superpowers/plans/2026-08-15-codebase-hygiene.md` — Part A (structure: S1-S6) then Part B (auth: A1-A3). Start at **S1** (package hygiene); it is the prerequisite for everything else, since `app/tests` must be a real package before the auth tests can import their helpers.
-   - `docs/plans/2026-07-03-book-refactor-plan.md` — Tasks 6-16, starting at Task 6 (rewrite BookRepo with criteria-driven search + pagination + 2.0 style).
-   - Recommended order: hygiene Part A first. It fixes packaging, manifests, and paths that the book refactor otherwise inherits.
+1. [x] ~~Review + commit the uncommitted work~~ — DONE (5 commits, tree clean). Still to do: **restart opencode** so the new AGENTS.md, permission block, and subagents load.
+2. [ ] **Decide which plan runs first** — two are in flight, both under `docs/superpowers/plans/`:
+   - `2026-08-15-codebase-hygiene.md` — Part A (structure: S1-S6) then Part B (auth: A1-A3). Start at **S1** (package hygiene); it is the prerequisite for everything else, since `app/tests` must be a real package before the auth tests can import their helpers.
+   - `2026-08-16-book-refactor.md` — Tasks 0-6, starting at Task 0 (`file_type` hotfix + `cover_url` move).
+   - Recommended order: hygiene Part A first. It fixes packaging, manifests, and paths that the book refactor otherwise inherits. The book spec itself flags the S1 ordering interaction (settings import path).
 3. [ ] Hygiene S1 → S6 → gate (`ruff`, `mypy` on changed files, `pytest`, `docker compose build`) before starting Part B.
-4. [ ] Book refactor Task 7 onward: ContentValidator + BookError hierarchy, then shrink `book_service` into 5 modules.
+4. [ ] Book refactor: read the governing spec `docs/superpowers/specs/2026-08-16-book-refactor-design.md` before Task 0 — the plan implements it and the spec wins on any disagreement.
 5. [ ] On the other machine: `git pull origin refactor && cat STATE.md`. Type `/todo` for a briefing.

@@ -184,7 +184,7 @@ Where things go:
 - **New setting or path** → `config.py`. Never a literal in a router.
 - **New model** → define it, then export it from `models/__init__.py`, or `Base.metadata` will not see it and Alembic will generate a `drop_table` for it.
 - **Cross-module helper** → a service. Do not create a `utils` grab-bag.
-- **New plans and specs** → `docs/superpowers/plans/`, `docs/superpowers/specs/`. See "Plans and Specs — two trees" below for the older tree.
+- **Plans and specs** → `docs/superpowers/plans/`, `docs/superpowers/specs/`. See "Plans and Specs" below for the one tree.
 
 ## Best Practices
 
@@ -241,16 +241,13 @@ Notes that make the difference between these working and not:
 - Test fails after **3 consecutive autonomous attempts** → STOP. Do not keep looping. Print the exact failing output and ask for direction.
 - Config or tooling behaving unexpectedly → read the schema or run `--help` before guessing. Report what you found.
 
-## Plans and Specs — two trees
+## Plans and Specs
 
-Both are live and tracked. Neither is dead.
+One tree only: `docs/superpowers/plans/` and `docs/superpowers/specs/`. All new plans and specs go here.
 
-| Path | Holds |
-|---|---|
-| `docs/plans/`, `docs/specs/` | Older work: `2026-06-02-auth-redesign`, `2026-07-03-book-refactor` (book refactor is still in progress — Tasks 6-16 open) |
-| `docs/superpowers/plans/`, `docs/superpowers/specs/` | Newer work: `2026-05-26-monorepo-restructure`, `2026-08-15-codebase-hygiene` |
+The older `docs/plans/` and `docs/specs/` trees were deleted on 2026-08-16 — the auth work was fully committed, and the book refactor was superseded by `docs/superpowers/plans/2026-08-16-book-refactor.md` + its spec. Recover any of them from git history (`git log --follow -- docs/plans/<file>`) if ever needed; do not recreate the tree.
 
-Write **new** plans and specs to `docs/superpowers/`. When looking for the active plan, check both trees — there are currently two in flight (book refactor and codebase hygiene).
+Two plans are in flight: `2026-08-15-codebase-hygiene` (structure + auth) and `2026-08-16-book-refactor`. `2026-05-26-monorepo-restructure` is largely complete.
 
 ## Migration in Flight
 

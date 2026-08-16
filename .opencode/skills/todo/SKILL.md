@@ -24,23 +24,23 @@ Generate a project briefing that shows:
 
 1. **Read STATE.md** (repo root) — current project state, in-progress tasks, reminders, next steps.
 
-2. **Find the active plans.** There are TWO plan trees and both are live — never assume one:
+2. **Find the active plans.** There is ONE plan tree — `docs/superpowers/plans/`:
 
    ```bash
-   ls docs/plans/ docs/superpowers/plans/
+   ls docs/superpowers/plans/
    ```
 
    For each plan file, count progress instead of reading the whole thing (these files run to thousands of lines):
 
    ```bash
-   for f in docs/plans/*.md docs/superpowers/plans/*.md; do
-     echo "$f: $(grep -c '^\- \[x\]' "$f") done / $(grep -c '^\- \[ \]' "$f") open"
+   for f in docs/superpowers/plans/*.md; do
+     echo "$f: $(grep -c '^- \[x\]' "$f") done / $(grep -c '^- \[ \]' "$f") open"
    done
    ```
 
    A plan with zero `[x]` and many `[ ]` has not been started. A plan with no open items is finished — skip it. Read only the sections around the first unchecked box of each plan that still has open work.
 
-   As of 2026-08-15 two plans are in flight: `docs/plans/2026-07-03-book-refactor-plan.md` (Tasks 6-16 open) and `docs/superpowers/plans/2026-08-15-codebase-hygiene.md` (not started). Verify this with the command above rather than trusting this line.
+   As of 2026-08-16 two plans are in flight: `2026-08-15-codebase-hygiene` (not started) and `2026-08-16-book-refactor`. Verify this with the command above rather than trusting this line.
 
 3. **Run `git log --oneline -20`** — see recent commits to understand what was recently completed.
 

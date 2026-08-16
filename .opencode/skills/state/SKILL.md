@@ -97,5 +97,5 @@ If `STATE.md` does not exist, create it with this structure:
 - Always update the `Last Updated` header, even for small changes.
 - If STATE.md is not committed, remind the user to commit it so it survives machine switches.
 - **Never restate the Definition of Done commands in this file.** Read them from `AGENTS.md` at run time. A second copy drifts from the first — that is exactly how this skill ended up citing four commands that no longer worked.
-- **Two plan trees are active** (`docs/plans/` and `docs/superpowers/plans/`). When recording progress, name the plan file — a bare task number is ambiguous.
+- **All plans live in one tree:** `docs/superpowers/plans/`. When recording progress, name the plan file — a bare task number is ambiguous when two plans are in flight.
 - Record any newly discovered violation of the six binding invariants in `AGENTS.md` under Decisions Log or Remind Me, so it is not rediscovered next session.
