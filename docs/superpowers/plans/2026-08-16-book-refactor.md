@@ -194,6 +194,3 @@ git commit -m "fix: map search file_type to book_type; move cover_url to BookRea
 
 ---
 
-## Task 1+: not yet written
-
-Tasks 1–6 (book_errors + ContentValidator, BookFileStorage, EpubMetadataReader, CoverGenerator, the fused BookRepo/BookService/book_router rewrite, and the final gate) are written in subsequent batches and appended below this line. Do not begin Task 1 until this file contains it.
