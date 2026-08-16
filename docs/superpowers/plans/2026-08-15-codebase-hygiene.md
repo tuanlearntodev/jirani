@@ -126,7 +126,7 @@ One more constraint the old plan missed: **`from app import settings` is load-be
 
 *4. Configuration belongs in the file, not the invocation.* Without `[tool.pytest.ini_options]`, whether the suite runs depends on your shell's CWD. Encoding `pythonpath` and `testpaths` in `pyproject.toml` makes the command reproducible on every machine and in CI — the same reason `uv.lock` exists. Prefer declarative config over remembered incantations.
 
-- [ ] **Step 1: Establish the baseline — the harness works today**
+- [x] **Step 1: Establish the baseline — the harness works today**
 
 ```bash
 cd backend && uv run pytest app/tests -v
@@ -134,7 +134,7 @@ cd backend && uv run pytest app/tests -v
 
 Expected: `1 passed` (`test_client_boots`). This is the safety net for every later step; if it does not pass, stop and fix the harness before touching anything.
 
-- [ ] **Step 2: Add the missing package markers**
+- [x] **Step 2: Add the missing package markers**
 
 ```bash
 touch backend/app/tests/__init__.py backend/app/dependencies/__init__.py
@@ -142,7 +142,7 @@ touch backend/app/tests/__init__.py backend/app/dependencies/__init__.py
 
 Both files stay empty. An empty `__init__.py` is the correct content for a package that exports nothing — it declares "this directory is a package" and nothing more.
 
-- [ ] **Step 3: Add pytest config to `backend/pyproject.toml`**
+- [x] **Step 3: Add pytest config to `backend/pyproject.toml`**
 
 Append:
 
@@ -155,7 +155,7 @@ addopts = "-q --tb=short"
 
 `pythonpath = ["."]` puts `backend/` on `sys.path` so `app.*` and `app.tests.*` resolve regardless of CWD. `testpaths` means bare `uv run pytest` collects the right directory.
 
-- [ ] **Step 4: Rewrite `backend/app/__init__.py`**
+- [x] **Step 4: Rewrite `backend/app/__init__.py`**
 
 Replace the entire file with:
 
@@ -176,7 +176,7 @@ __all__ = ["__version__", "__author__", "__description__"]
 
 Every subpackage import and the `settings` / `get_db` / `SessionLocal` / `Base` re-exports are gone. Consumers import from the defining module instead — see the next step.
 
-- [ ] **Step 5: Update the three `from app import settings` call sites**
+- [x] **Step 5: Update the three `from app import settings` call sites**
 
 `from app import settings` only worked because of the eager re-export just deleted. Three files depend on it (verified by grep — do not skip any):
 
@@ -198,7 +198,7 @@ from app.config import settings
 
 In `main.py` the line also carries the comment `# Import models to register them with Base` — delete the comment, it is now false (and was misleading before: models registered as a *side effect* of the eager import, not because of `settings`).
 
-- [ ] **Step 6: Make model registration explicit in `backend/app/main.py`**
+- [x] **Step 6: Make model registration explicit in `backend/app/main.py`**
 
 This is the load-bearing consequence of Step 4. `Base.metadata` is only populated by importing the modules that define the models. Previously that happened invisibly. Add an explicit import near the other `app` imports:
 
@@ -208,7 +208,7 @@ import app.models  # noqa: F401  # registers every model on Base.metadata
 
 The `# noqa: F401` tells ruff the "unused" import is deliberate. *Why this matters:* SQLAlchemy's declarative `Base` is populated by class-definition side effects. If a model module is never imported, its table simply does not exist in `Base.metadata` — `create_all` skips it and Alembic autogenerate emits a `drop_table` for it. This same import is repeated in `migrations/env.py` in Task S5 for exactly that reason. **Implicit side-effect registration should always be made explicit at the composition root.**
 
-- [ ] **Step 7: Verify nothing broke**
+- [x] **Step 7: Verify nothing broke**
 
 ```bash
 cd backend && uv run python -c "import app; print(app.__version__)"
@@ -218,7 +218,7 @@ cd backend && uv run pytest -v
 
 Expected: version prints; route count > 10; `1 passed`. If an `ImportError` appears, a call site of `from app import <name>` was missed — grep again for `from app import`.
 
-- [ ] **Step 8: Lint + commit**
+- [x] **Step 8: Lint + commit**
 
 ```bash
 cd backend && uv run ruff format app/__init__.py app/main.py app/api/book_router.py app/services/book_service.py && uv run ruff check app/__init__.py app/main.py app/api/book_router.py app/services/book_service.py --ignore B008

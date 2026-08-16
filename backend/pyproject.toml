@@ -28,3 +28,8 @@ dev = [
     "ruff",
     "testcontainers[postgres]>=4.9.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]
+pythonpath = ["."]
+addopts = "-q --tb=short"

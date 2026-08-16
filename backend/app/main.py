@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app import settings  # Import models to register them with Base
+import app.models
 from app.api import (
     audio_router,
     auth_router,
@@ -13,6 +13,7 @@ from app.api import (
     tag_router,
     video_router,
 )
+from app.config import settings
 from app.database import Base, engine
 
 

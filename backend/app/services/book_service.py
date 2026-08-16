@@ -6,7 +6,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 from fastapi import HTTPException, UploadFile
 
-from app import settings
+from app.config import settings
 from app.repositories import BookRepo
 from app.schemas import BookBase, BookCreate, BookRead, BookUpload, TagCreate
 
