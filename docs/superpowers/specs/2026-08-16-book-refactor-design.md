@@ -113,7 +113,7 @@ The original plan's teaching note that `.unique()` solves this is wrong and is r
 - **Tags: OR.** `?tags=math&tags=algebra` returns books tagged either. Names are lowercased before comparison.
 - **Metadata: containment (`@>`).** `metadata_={"publisher": "Penguin"}` becomes `Book.metadata_.contains(...)`, served by the existing GIN index. Exposed as a repeatable `?metadata=key:value` param parsed into a dict by the router — making the design's extensibility claim true through HTTP, which it was not before.
 
-**Write-schema exclusion.** `cover_url` is a `@computed_field` on `BookBase`, inherited by `BookCreate`, so `Book(**model_dump())` raises `TypeError: 'cover_url' is an invalid keyword argument`. Writes use `exclude={"tags", "cover_url"}`. Preferred alternative, noted for the implementer: move `cover_url` to `BookRead` only — it is response shaping and has no business on a write schema.
+**`cover_url` moves off `BookBase`.** It is currently a `@computed_field` on `BookBase`, inherited by `BookCreate`, so `Book(**model_dump())` raises `TypeError: 'cover_url' is an invalid keyword argument`. It is **moved to `BookRead` only** — it is response shaping and has no business on a write schema. This edits a completed task (old Task 5, commit `ec4495a`) and is folded into Task 0. It permanently removes the footgun rather than guarding against it with `exclude={"tags", "cover_url"}` at every write call site. Once moved, write paths need only `exclude={"tags"}`.
 
 ### Upload
 
@@ -153,7 +153,7 @@ Bottom-up, leaf-first. Tasks 1–4 are pure additions — nothing imports them y
 
 | Task | Content | Commits |
 |---|---|---|
-| 0 | `file_type` hotfix: `book_repo.py:107,122-123`, `book_service.py:40,48,226,326` | 1 |
+| 0 | `file_type` hotfix: `book_repo.py:107,122-123`, `book_service.py:40,48,226,326`; move `cover_url` from `BookBase` to `BookRead` | 1 |
 | 1 | `book_errors.py` + `ContentValidator` | 1 |
 | 2 | `BookFileStorage` (incl. `resolve()` containment) | 1 |
 | 3 | `EpubMetadataReader` | 1 |
@@ -225,6 +225,6 @@ The 2026-07-03 plan gets a header marking it superseded, and these are recorded 
 ## Risks
 
 1. **Task 5 is the largest unit** — three files in one commit. Mitigated by three separated steps and a gate after each file, with a single commit at the end.
-2. **`cover_url` on `BookBase`** — the `exclude` set is easy to forget at a new call site. The alternative (move to `BookRead`) is preferred but touches a completed task, so it is the implementer's call.
+2. **`cover_url` move touches a completed task** — editing old Task 5's output (commit `ec4495a`) means the schema diff must keep every existing read response identical. Verified by the `Page_BookRead_` OpenAPI snapshot plus a `BookRead.model_dump()` field-set assertion.
 3. **Hygiene S1 ordering** — if S1 lands after this work, the settings import path changes under these modules. Both forms are stated; the diff is mechanical.
 4. **Range implementation is subtle** — the 416 path and suffix ranges are easy to get wrong. Probe 2 covers the suffix case; the plan will enumerate the full table as assertions.
