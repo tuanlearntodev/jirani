@@ -1,7 +1,7 @@
 [project]
 name = "jirani-offline-library"
 version = "0.1.0"
-description = "Add your description here"
+description = "Jirani Offline Library — FastAPI backend for offline library management"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -304,12 +304,12 @@ cd backend && uv sync && uv run pytest -v
 
 Expected: sync succeeds against `backend/uv.lock`; tests still `1 passed`.
 
-- [ ] **Step 6: Commit**
-
-```bash
-git add -A
-git commit -m "chore: collapse to a single dependency manifest (backend/pyproject.toml + uv.lock)"
-```
+- [x] **Step 6: Commit**
+ 
+ ```bash
+ git add -A
+ git commit -m "chore: collapse to a single dependency manifest (backend/pyproject.toml + uv.lock)"
+ ```
 
 ---
 

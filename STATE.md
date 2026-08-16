@@ -14,7 +14,8 @@ FastAPI + PostgreSQL backend for an offline library. Auth refactor done. **Hygie
 - [x] **AGENTS.md rewrite** — COMPLETE (six binding invariants, scoped advisory mode, corrected DoD commands)
 - [ ] **Book refactor** — `docs/superpowers/plans/2026-08-16-book-refactor.md`, Tasks 0-6 (revision of the deleted 2026-07-03 plan)
 - [x] **Codebase hygiene plan — S1 package hygiene** — COMPLETE (2026-08-16); next: S2 (one dependency manifest)
-- [ ] **Codebase hygiene plan** — `docs/superpowers/plans/2026-08-15-codebase-hygiene.md`, S2-S6 + Part B open
+- [x] **Codebase hygiene plan — S2 one dependency manifest** — COMPLETE (2026-08-16): root `uv.lock` + `backend/requirements.txt` deleted, description fixed, `uv sync` + `1 passed`; next: S3 (settings-driven upload paths)
+- [ ] **Codebase hygiene plan** — `docs/superpowers/plans/2026-08-15-codebase-hygiene.md`, S3-S6 + Part B open
 
 ## Remind Me (Future)
 - [ ] Set up Alembic migrations (replaces manual DROP TABLE workflow) (priority: low, added: 2026-07-08) — **now Task S5 of the hygiene plan**
@@ -73,7 +74,8 @@ Tracked so they shrink instead of becoming permanent. Four close when the hygien
 ## Next Steps
 1. [x] ~~Restart opencode~~ — superseded; the session has been running with the new config.
 2. [x] **Hygiene S1 (package hygiene)** — COMPLETE 2026-08-16. `app.tests` now a real package; Part B's test imports unblocked.
-3. [ ] Hygiene **S2** — one dependency manifest: verify drift (`diff uv.lock backend/uv.lock`), confirm `pyproject.toml` is a superset of `requirements.txt`, `git rm` root `uv.lock` + `backend/requirements.txt`, fix placeholder description, `uv sync && pytest`. **Must land before S4** (Dockerfile installs from `uv.lock`).
-4. [ ] Hygiene S3 → S6 → gate (`ruff`, `mypy` on changed files, `pytest`, `docker compose build`) before starting Part B.
+3. [x] **Hygiene S2 (one dependency manifest)** — COMPLETE 2026-08-16. **Landed before S4** as required (Dockerfile installs from `uv.lock`).
+4. [ ] Hygiene **S3** — settings-driven upload paths + consolidate the two upload trees (`AUDIO_DIR`/`VIDEO_DIR` in config, fix audio/video routers, `.gitkeep`s, untrack orphaned media) — touches schema-adjacent config, get approval on the tree-consolidation option.
+5. [ ] Hygiene S4 → S6 → gate (`ruff`, `mypy` on changed files, `pytest`, `docker compose build`) before starting Part B.
 4. [ ] Book refactor: read the governing spec `docs/superpowers/specs/2026-08-16-book-refactor-design.md` before Task 0 — the plan implements it and the spec wins on any disagreement.
 5. [ ] On the other machine: `git pull origin refactor && cat STATE.md`. Type `/todo` for a briefing.
