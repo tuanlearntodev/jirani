@@ -235,6 +235,15 @@ Notes that make the difference between these working and not:
 - **mypy on changed files only.** `mypy . --strict` across the repo surfaces pre-existing debt unrelated to your change. Log those in STATE.md; do not fix unrelated files.
 - **Tests need a running Docker daemon** — the testcontainers harness starts its own `postgres:16-alpine`. You do **not** need `docker compose up -d db` for tests.
 
+## Tick the plan box in the same commit
+
+When the change completes a task from a plan in `docs/superpowers/plans/`, ticking the box is part of "done", not an optional extra step:
+
+1. Before committing, open the plan file and flip that task's `- [ ]` to `- [x]`.
+2. Include the plan file in the **same commit** as the code. The diff mixes a code change and a docs tick, cleanly separated by path.
+
+Do not commit the code and tick the box in two commits, and do not defer the tick to "later" — a later tick is the drift this rule exists to prevent. `docs/**` is writable by the agent, so there is no permission reason to skip it. If a commit completes no plan task, this step does not apply.
+
 ## Failure Protocol
 
 - Missing dependency → check `backend/pyproject.toml`, then `uv add <pkg>`. There is no `requirements.txt`; do not create one.

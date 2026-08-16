@@ -57,8 +57,13 @@ VERIFY: <command run>
   PASS | FAIL
   <if FAIL: the exact error output, verbatim>
 
+PLAN TICK:
+  <plan file>:<line> — flip "- [ ]" to "- [x]" for the task this completes, or "none"
+
 NOT DONE / OUT OF SCOPE:
   <anything the brief needed that you could not or would not do>
 ```
+
+The `PLAN TICK` line names the exact box in `docs/superpowers/plans/` that this work completes, so the caller flips it in the same commit (per AGENTS.md "Tick the plan box in the same commit"). If the brief says which task it is, echo it; if unsure, say "none — caller to confirm". You do not commit, and you do not edit the plan file — you only name the box.
 
 Keep it short. The caller wants the result and the diffs, not a narrative.

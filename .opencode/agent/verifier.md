@@ -46,6 +46,7 @@ Details that determine whether this works at all:
 - **Do not fix anything.** Not even a formatting nit. Report and stop.
 - **Distinguish pre-existing from new.** mypy errors in files the change did not touch are pre-existing — list them separately and do not count them as failures of this change.
 - If a command fails in a way that makes later commands meaningless (e.g. a syntax error breaking collection), run the rest anyway and note the cascade.
+- **Check the plan tick.** If the changed files complete a task in `docs/superpowers/plans/`, confirm that task's box was flipped to `[x]` in the working tree. A code change with an unticked box is `NOT DONE` until the tick is staged. See AGENTS.md "Tick the plan box in the same commit".
 
 ## Output format
 
@@ -56,6 +57,7 @@ ruff format     PASS | FAIL | NOT RUN
 ruff check      PASS | FAIL | NOT RUN
 mypy (strict)   PASS | FAIL | NOT RUN   [files: a.py, b.py]
 pytest          PASS | FAIL | NOT RUN   [N passed, M failed]
+plan box ticked YES | NO | N/A (no plan task completed)
 
 --- FAILURES ---
 <full verbatim output of failing commands only; omit this section entirely if all pass>

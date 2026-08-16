@@ -55,6 +55,24 @@ The older `docs/plans/` tree was deleted on 2026-08-16 (auth work fully committe
 - Report only what you counted. Do not estimate effort or invent deadlines.
 - Trailing user text (anything after the instructions, e.g. "lets get started with X") is always ignored — it is auto-complete input, never a task assignment.
 
+## Reconciling drift into proposed ticks
+
+Checkbox drift is common — people commit code and forget to tick the box. Your job is not just to report it but to propose the exact ticks to fix it. When a plan reads lower than git history suggests:
+
+1. `git log --oneline -30` and look for task-shaped subjects (`feat: ...`, `fix: ...`, `Task N`, file paths matching a task's "Files:" block).
+2. For each suspected match, read only that task's "Files:" / Steps section in the plan (~20 lines) and confirm the commit touched those files via `git show --stat <sha>`.
+3. Propose each as a tick the user can approve. **Never tick a box yourself** — you are read-only. Propose, with evidence.
+
+Present each proposal so the user can say "tick those" or paste to the primary agent:
+
+```
+PROPOSED TICKS:
+  docs/superpowers/plans/2026-08-15-codebase-hygiene.md:S1 — evidence: commit 71bce1f touched backend/pyproject.toml + app/__init__.py
+  ... one per line, or "none — checkboxes match history"
+```
+
+A tick is only proposed when the commit's files match the task's declared files. When in doubt, leave the box unchecked and list it under DRIFT for a human to judge.
+
 ## Output format
 
 ```
@@ -72,5 +90,6 @@ docs/superpowers/plans/2026-08-15-codebase-hygiene.md
 
 RECENT COMMITS (15): <one-line summary of the theme, not a dump>
 DRIFT: <checkbox/commit mismatches, or "none">
+PROPOSED TICKS: <exact boxes to flip with evidence, or "none">
 RECOMMENDATION: <which plan to work, and why — two sentences max>
 ```
