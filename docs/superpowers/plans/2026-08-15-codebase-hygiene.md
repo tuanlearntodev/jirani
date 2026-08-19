@@ -478,7 +478,7 @@ git commit -m "chore: untrack orphaned media, add .gitkeep to upload dirs"
 
 *Bonus — `build-essential` is dead weight.* It was needed to compile C extensions from source, but every dependency here (`psycopg2-binary`, `pymupdf`, `bcrypt`) ships manylinux wheels. Dropping it removes a compiler toolchain from the production image: smaller, faster, smaller attack surface. **Never ship build tooling in a runtime image.**
 
-- [ ] **Step 1: Rewrite `backend/Dockerfile`**
+- [x] **Step 1: Rewrite `backend/Dockerfile`**
 
 ```dockerfile
 # Build backend
@@ -515,7 +515,7 @@ Notes on the details:
 - `--no-sync` on the `CMD` stops uv from re-resolving at container start — the environment is already correct and the container may have no network.
 - `ENTRYPOINT` + `CMD` is the standard split: the entrypoint always runs and receives the CMD as its arguments, which `exec "$@"` then execs. That is why the entrypoint must end in `exec "$@"` — `exec` replaces the shell process so uvicorn becomes PID 1 and receives `SIGTERM` directly. Without `exec`, the shell stays PID 1, swallows signals, and `docker stop` degrades into a 10-second timeout and `SIGKILL`.
 
-- [ ] **Step 2: Update `docker/entrypoint.sh` to cover all four upload dirs**
+- [x] **Step 2: Update `docker/entrypoint.sh` to cover all four upload dirs**
 
 ```sh
 #!/usr/bin/env sh
@@ -530,7 +530,7 @@ exec "$@"
 
 `set -eu` is not decoration: `-e` aborts on any failing command so a broken migration cannot silently start a server against an outdated schema, and `-u` turns a typo'd variable into an error instead of an empty string.
 
-- [ ] **Step 3: Extend `.dockerignore`**
+- [x] **Step 3: Extend `.dockerignore`**
 
 Append:
 
@@ -547,7 +547,7 @@ Everything listed is either a host-specific artifact or a secret. `backend/data/
 
 *Concept:* `.dockerignore` filters the **build context** — the tarball the daemon receives before the first instruction runs. Excluding files here means they are never uploaded, never cached, and never leak into a layer via a broad `COPY`. It is a security boundary, not just a speed optimization.
 
-- [ ] **Step 4: Build and verify**
+- [x] **Step 4: Build and verify**
 
 ```bash
 docker compose build jirani-backend
@@ -556,7 +556,7 @@ docker compose run --rm --entrypoint sh jirani-backend -c "python --version && u
 
 Expected: `Python 3.13.x` and `deps ok`. If `uv sync --frozen` fails with a lock mismatch, run `cd backend && uv lock` and commit the updated lock — that failure means `pyproject.toml` and `uv.lock` genuinely disagree, which is exactly what `--frozen` exists to catch.
 
-- [ ] **Step 5: Confirm the entrypoint is actually running**
+- [x] **Step 5: Confirm the entrypoint is actually running**
 
 ```bash
 docker compose run --rm jirani-backend sh -c 'ls -d /app/uploads/*'
@@ -564,7 +564,7 @@ docker compose run --rm jirani-backend sh -c 'ls -d /app/uploads/*'
 
 Expected: all four directories listed, created by the entrypoint rather than the Dockerfile's `mkdir`. This is the check the old plan never made.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/Dockerfile .dockerignore docker/entrypoint.sh
