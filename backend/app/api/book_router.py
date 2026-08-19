@@ -1,5 +1,5 @@
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -46,7 +46,7 @@ def _iter_file_chunks(
 
 @router.post("/upload", response_model=BookBase)
 async def upload_new_book(
-    title: Optional[str] = Form(None),
+    title: str | None = Form(None),
     tags: str = Form(""),
     file: UploadFile = File(...),
     book_service: BookService = Depends(get_book_service),
@@ -62,7 +62,7 @@ async def upload_new_book(
             ]
         metadata = BookUpload(title=title, tags=tag_list)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid tags format: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid tags format: {e!s}")
 
     return await book_service.upload_book(
         metadata=metadata,
@@ -72,16 +72,16 @@ async def upload_new_book(
 
 @router.get("/search/", response_model=list[BookBase])
 async def search_books(
-    title: Optional[str] = Query(
+    title: str | None = Query(
         None, description="Search by book title (case-insensitive, partial match)"
     ),
-    tags: Optional[str] = Query(
+    tags: str | None = Query(
         None, description="Comma-separated list of tags to filter by"
     ),
-    file_type: Optional[str] = Query(
+    file_type: str | None = Query(
         None, description="Filter by file type (e.g., epub, pdf)"
     ),
-    extension: Optional[str] = Query(None, description="Filter by file extension"),
+    extension: str | None = Query(None, description="Filter by file extension"),
     book_service: BookService = Depends(get_book_service),
 ):
     """
@@ -150,9 +150,9 @@ async def get_book_details(
 @router.put("/{book_uid}", response_model=BookBase)
 async def update_book(
     book_uid: str,
-    title: Optional[str] = Form(None),
+    title: str | None = Form(None),
     tags: str = Form(""),
-    cover: Optional[UploadFile] = File(None),
+    cover: UploadFile | None = File(None),
     book_service: BookService = Depends(get_book_service),
 ):
     """Teacher endpoint to update book metadata and optional cover."""
@@ -169,7 +169,7 @@ async def update_book(
 
         metadata = BookUpload(title=title, tags=tag_list)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid tags format: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid tags format: {e!s}")
 
     return await book_service.update_book(book_uid, metadata, cover)
 
@@ -183,7 +183,6 @@ async def delete_book(
         book_service.delete_book(book_uid)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return
 
 
 @router.get("/{book_uid}/read")
@@ -199,7 +198,7 @@ def read_book(book_uid: str, db: Session = Depends(get_db)):
         if not file_path.exists():
             raise HTTPException(
                 status_code=404,
-                detail=f"Converted PDF not found — try re-uploading the EPUB",
+                detail="Converted PDF not found — try re-uploading the EPUB",
             )
     else:
         file_path = settings.UPLOAD_DIR / book.file_path

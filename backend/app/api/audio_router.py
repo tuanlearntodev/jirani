@@ -1,14 +1,17 @@
-from fastapi import APIRouter, File, UploadFile, Form, Depends, HTTPException
+import os
+import shutil
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from app.schemas.audio_schema import Audio_Create, Audio_View
-from app.repositories.audio_repo import Audio_Repo
+
+from app.config import settings
+from app.database import get_db
 from app.models.audio import Audio
 from app.models.tag import Tag
-from app.database import get_db
-import os, shutil, uuid, asyncio
-from typing import Optional
-from app.config import settings
+from app.repositories.audio_repo import Audio_Repo
+from app.schemas.audio_schema import Audio_Create, Audio_View
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 ALLOWED_AUDIO = {"mp3", "mp4", "wav", "ogg", "m4a", "aac", "flac"}
@@ -106,9 +109,9 @@ async def upload_multiple(
 @router.patch("/{audio_id}", response_model=Audio_View)
 def update_audio(
     audio_id: int,
-    title: Optional[str] = None,
-    description: Optional[str] = None,
-    tags: Optional[str] = None,
+    title: str | None = None,
+    description: str | None = None,
+    tags: str | None = None,
     db: Session = Depends(get_db),
 ):
     audio = (

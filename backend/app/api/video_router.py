@@ -1,15 +1,17 @@
-from fastapi import APIRouter, File, UploadFile, Form, Depends, HTTPException
-from app.schemas.video_schema import Video_Create, Video_View
-from app.repositories.video_repo import Video_Repo
-from sqlalchemy.orm import Session, joinedload
-from app.models.video import Video
-from app.models.tag import Tag
-import os, shutil, uuid, asyncio, mimetypes
+import mimetypes
+import shutil
+import uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from app.database import get_db
-from pathlib import Path
-from typing import Optional
+from sqlalchemy.orm import Session, joinedload
+
 from app.config import settings
+from app.database import get_db
+from app.models.tag import Tag
+from app.models.video import Video
+from app.repositories.video_repo import Video_Repo
+from app.schemas.video_schema import Video_Create, Video_View
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 VIDS_DIR = settings.VIDEO_DIR
@@ -40,7 +42,7 @@ def get_videos(db: Session = Depends(get_db)):
 async def upload_file(
     file: UploadFile = File(...),
     title: str = Form(...),
-    description: Optional[str] = Form(None),
+    description: str | None = Form(None),
     tags: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -96,9 +98,9 @@ async def upload_multiple(
 @router.patch("/{video_id}", response_model=Video_View)
 def update_video(
     video_id: int,
-    title: Optional[str] = None,
-    description: Optional[str] = None,
-    tags: Optional[str] = None,
+    title: str | None = None,
+    description: str | None = None,
+    tags: str | None = None,
     db: Session = Depends(get_db),
 ):
     video = (

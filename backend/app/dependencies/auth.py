@@ -1,13 +1,14 @@
 # app/dependencies/auth.py
-from app.config import settings
-from app.database import get_db
-from app.models import Account, RoleEnum
-from app.repositories import AuthRepo
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from fastapi.security.http import HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.database import get_db
+from app.models import Account, RoleEnum
+from app.repositories import AuthRepo
 
 security = HTTPBearer()
 
