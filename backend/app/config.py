@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     DATA_DIR: Path = BASE_DIR / "data"
     UPLOAD_DIR: Path = BASE_DIR / "uploads" / "books"
     COVER_DIR: Path = BASE_DIR / "uploads" / "covers"
+    AUDIO_DIR: Path = BASE_DIR / "uploads" / "audio"
+    VIDEO_DIR: Path = BASE_DIR / "uploads" / "vids"
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
     MAX_COVER_SIZE: int = 5 * 1024 * 1024  # 5MB
 
