@@ -1,10 +1,12 @@
-# Book Refactor Implementation Plan (revision of 2026-07-03)
+# Book Refactor Implementation Plan (rescoped 2026-08-20)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish the book feature refactor — streaming, epub + pdf CRUD, extensible search — on PostgreSQL, fixing the four Critical defects found in review of the 2026-07-03 plan.
 
-**Architecture:** Five focused service modules replace the 605-line `BookService` god class; a SQLAlchemy 2.0 `Mapped[]` model with JSONB `metadata_`; a `BookSearchCriteria` object driving a dynamic query builder with `selectinload` + `tags.any()` + explicit `ORDER BY`; a single RFC 7233 Range-aware streaming endpoint; `RoleChecker` on every endpoint.
+**Explicitly out of scope this pass:** the audio / video / tag test suites and their delete-missing 500s, plus the two features this plan deliberately drops (cover replacement on PUT; epub→pdf conversion and `/read`). They are preserved verbatim in the Deferred Work annex at the bottom so nothing is lost. The audio/video routers are untouched here — hygiene S3 already re-anchored their upload paths, and Part A's `BookFileStorage` learns from that lesson rather than re-litigating it.
+
+**Architecture:** Five focused service modules replace the 605-line `BookService` god class; a SQLAlchemy 2.0 `Mapped[]` model with JSONB `metadata_`; a `BookSearchCriteria` object driving a dynamic query builder with `selectinload` + `tags.any()` + explicit `ORDER BY`; a single RFC 7233 Range-aware streaming endpoint; `RoleChecker` on every endpoint. Tests run on the committed testcontainers harness (`backend/app/tests/conftest.py`, `361bb48`): `db`, `client`, `setup_paths`, plus module-level `setup_admin`/`login`/`auth_headers`. Since hygiene S1 (commit `467beee`) `app.tests` is a real package, so those helpers are importable rather than an artifact of pytest path insertion. One harness trap survives: **call `db.expire_all()` before reading via `db` after a write through `client`** — the long-lived session's identity map otherwise returns stale objects.
 
 **Tech Stack:** Python 3.13, FastAPI, SQLAlchemy 2.0, Pydantic v2, PostgreSQL 16 (testcontainers for tests), PyMuPDF, uv, pytest/httpx, ruff, mypy.
 
@@ -21,34 +23,63 @@ Every task implicitly includes all of the following. Exact values copied from th
 - Never delete a failing test to make the suite pass — fix the underlying logic (AGENTS.md)
 - After the final task, run `graphify update .` (AST-only)
 - **Locked decisions:** tag filtering is **OR**; `metadata_` uses **containment (`@>`)**; `cover_url` lives on **`BookRead` only**; the `file_type` hotfix runs first (Task 0)
-- **Prerequisites (external, not tasks here):** hygiene S1 (creates `backend/app/tests/__init__.py`; changes `from app import settings` → `from app.config import settings`) and hygiene S5 (Alembic). Neither blocks Tasks 0–4. Only the settings import path in Tasks 2 and 5 is affected — both forms are stated where relevant.
+- **Prerequisites (external, not tasks here):** hygiene **S1 landed** (commit `467beee` — `app.tests` is a package, `from app.config import settings` is the only import form in the tree) and hygiene **S2/S3 landed** (single manifest; `UPLOAD_DIR`/`COVER_DIR` already BASE_DIR-anchored). Hygiene **S5 (Alembic) is still open**, and does not block: this plan touches no schema, so no migration is needed. Tasks 2 and 5 use the S1 import form throughout.
 
-## Test Harness Reference
+## Corrections to the previous plan
 
-Tests use the committed fixtures at `backend/app/tests/conftest.py` (`361bb48`): `db` (a `Session`), `client` (a `TestClient`), `setup_paths`, plus helpers `setup_admin`/`login`/`auth_headers`. Two documented traps:
+The prior revision of this document — and its ancestor `docs/plans/2026-07-03-book-refactor-plan.md`, recovered from git (`git show 7ef380a^:docs/plans/2026-07-03-book-refactor-plan.md`) — was audited against the working tree on 2026-08-20. Five claims were wrong or stale. Their corrections are folded into the tasks below.
 
-- Call `db.expire_all()` before reading via `db` after a write through `client` — the long-lived session's identity map otherwise returns stale objects.
-- Never add `backend/app/tests/__init__.py` by hand. It makes `app.tests.conftest` a package import, which triggers `app/__init__.py`'s eager `from .database import ...` at collection time and builds the engine from the default `DATABASE_URL` before the container starts. Hygiene S1 handles this deliberately.
+| # | Previous claim | Verified reality | Consequence |
+|---|---|---|---|
+| 1 | "current tree code uses `from app import settings` (`book_service.py:9`); hygiene S1 changes it to `from app.config import settings`" (Task 2 Step 3) | **S1 already landed** (commit `467beee`, 2026-08-16): the tree imports `from app.config import settings` | The note was written in future tense. The S1 form is the only form; the "both forms are stated where relevant" caveat is retired, and the in-task note is updated |
+| 2 | Test Harness Reference trap: "Never add `backend/app/tests/__init__.py`" — it would make `app.tests` importable and trigger `app/__init__.py`'s eager imports at collection time | **Both halves are outdated.** S1 created `backend/app/tests/__init__.py` **and** stripped the eager subpackage imports from `app/__init__.py` (commit `467beee`) | `from app.tests.conftest import setup_admin, login, auth_headers` is now safe. Task 5a's inline login replication is kept only because it makes the probe files self-contained — the necessity is gone |
+| 3 | 2026-07-03 plan: "Task 2: Rewrite the `Book` model…" — model is 1.x `Column()` style | **Already done.** `Book` is SQLAlchemy 2.0 `Mapped[]` with JSONB `metadata_` and the GIN index (`models/book.py:13,23,30`) | No model task in this plan; Tasks 0–5 touch no schema. A future model change runs through hygiene S5's Alembic |
+| 4 | 2026-07-03 plan: "`app/tests/conftest.py` **Create** — Postgres test DB fixture (drop/create per session)" | The **testcontainers harness is committed** (`361bb48`): session-scoped `postgres:16-alpine`, autouse `reset_db`, `db`/`client`/`setup_paths` + `setup_admin`/`login`/`auth_headers` | Zero conftest work in this plan; the harness is consumed as-is. The old plan's manual "PostgreSQL schema reset via DROP TABLE" ceremony is obsolete — and moot, since the schema is untouched |
+| 5 | 2026-07-03 plan: god class is "567 lines" | **605 lines** as of 2026-08-20 — it grew 38 lines after the old plan was written | Cosmetic. The target (thin orchestration) is unchanged; Task 5b's rewrite is 605 → ~130 lines |
+
+## Current State (verified against the tree, 2026-08-20)
+
+| Area | State | Where |
+|---|---|---|
+| `BookService` god class | 🔴 605 lines — file save, magic-byte validation, cover generation, epub→pdf conversion, tag extraction and DB orchestration in one file | `backend/app/services/book_service.py` |
+| `BookRepo` | 🔴 Legacy 1.x `query()` + `joinedload`; filters hardcoded per method | `backend/app/repositories/book_repo.py:15,26,36,54,58,86,114` |
+| Search `file_type` defect | 🔴 LIVE — filters on `Book.file_type`, a column that does not exist → `AttributeError` (500) on `/books/search/` | `book_repo.py:122-123` |
+| MIME never persisted | 🔴 LIVE — `file_type=` kwarg to `BookCreate` silently dropped (`extra="ignore"`) | `book_service.py:226` |
+| Update reads dead attr | 🔴 LIVE — `file_type=existing_book.file_type` on the same nonexistent attribute | `book_service.py:326` |
+| Router auth | 🔴 Zero `RoleChecker` / `get_current_user` — all 8 endpoints open | `book_router.py:47-189` |
+| Streaming | 🔴 Three endpoints (`/stream` ignores `Range`, `/epub`, `/read`); `print("router hit")` debug call | `book_router.py:101,118,189,54` |
+| `cover_url` schema leak | 🔴 `@computed_field` on `BookBase` → leaks onto the `BookCreate` write schema | `book_schema.py:24-26` |
+| Book model | ✅ Already 2.0 — `Mapped[]`, JSONB `metadata_`, GIN index; no model task needed | `backend/app/models/book.py:13,23,30` |
+| Book tests | 🔴 Zero — the suite contains only `test_auth.py` | `backend/app/tests/` |
+| Test harness | ✅ testcontainers Postgres, session-scoped; `app.tests` importable as a package since S1 | `backend/conftest.py`, `backend/app/tests/__init__.py` |
 
 ## File Structure Map
 
-| File | Action | Responsibility |
-|---|---|---|
-| `backend/app/services/book_errors.py` | Create | `BookError` base; `BookNotFound`, `InvalidBookFile`, `BookAlreadyExists`, `CoverGenerationFailed` |
-| `backend/app/services/content_validator.py` | Create | `validate(bytes, filename) -> str` (extension); raises `InvalidBookFile` |
-| `backend/app/services/book_file_storage.py` | Create | `save(bytes, filename, uid) -> str`; `delete(rel_path) -> None`; `resolve(rel_path) -> Path` with UPLOAD_DIR containment |
-| `backend/app/services/epub_metadata_reader.py` | Create | `read(path) -> BookMetadata \| None` |
-| `backend/app/services/cover_generator.py` | Create | `generate(src, dest) -> bool`; returns `False` on failure, never raises |
-| `backend/app/services/book_service.py` | Rewrite | Thin orchestration over the four modules + `BookRepo` |
-| `backend/app/repositories/book_repo.py` | Rewrite | `search(criteria) -> Page[BookRead]`; 2.0 `select()` |
-| `backend/app/api/book_router.py` | Rewrite | `RoleChecker` + Range streaming + pagination + error mapping |
-| `backend/app/schemas/book_schema.py` | Modify | Move `cover_url` from `BookBase` to `BookRead` |
-| `backend/app/schemas/book_schema.py` (`BookUpload`) | — | Unchanged; reused by the router |
-| `backend/app/tests/test_book_search.py` | Create | C1 search correctness + pagination probes |
-| `backend/app/tests/test_book_stream.py` | Create | C3 Range cases + C4 traversal |
-| `backend/app/tests/test_book_upload.py` | Create | Happy path + rejection |
+| File | Action | Task | Responsibility |
+|---|---|---|---|
+| `backend/app/services/book_errors.py` | Create | 1 | `BookError` base; `BookNotFound`, `InvalidBookFile`, `BookAlreadyExists`, `CoverGenerationFailed` |
+| `backend/app/services/content_validator.py` | Create | 1 | `validate(bytes, filename) -> str` (extension); raises `InvalidBookFile` |
+| `backend/app/services/book_file_storage.py` | Create | 2 | `save(bytes, filename, uid) -> str`; `delete(rel_path) -> None`; `resolve(rel_path) -> Path` with UPLOAD_DIR containment |
+| `backend/app/services/epub_metadata_reader.py` | Create | 3 | `read(path) -> BookMetadata \| None` |
+| `backend/app/services/cover_generator.py` | Create | 4 | `generate(src, dest) -> bool`; returns `False` on failure, never raises |
+| `backend/app/services/book_service.py` | Rewrite | 0, 5 | Hotfix call sites; then thin orchestration over the four modules + `BookRepo` |
+| `backend/app/repositories/book_repo.py` | Rewrite | 0, 5 | `file_type` fix in place; then `search(criteria) -> Page[BookRead]`; 2.0 `select()` |
+| `backend/app/api/book_router.py` | Rewrite | 5 | `RoleChecker` + Range streaming + pagination + error mapping |
+| `backend/app/schemas/book_schema.py` | Modify | 0 | Move `cover_url` from `BookBase` to `BookRead` |
+| `backend/app/schemas/book_schema.py` (`BookUpload`) | — | — | Unchanged; reused by the router |
+| `backend/app/tests/test_book_search.py` | Create | 0, 5 | Task 0 hotfix probe; Part B C1 search correctness + pagination probes |
+| `backend/app/tests/test_book_validator.py` | Create | 1 | ContentValidator unit tests |
+| `backend/app/tests/test_book_storage.py` | Create | 2 | Storage round-trip + C4 traversal |
+| `backend/app/tests/test_book_epub_reader.py` | Create | 3 | EpubMetadataReader unit tests |
+| `backend/app/tests/test_book_cover.py` | Create | 4 | CoverGenerator unit tests |
+| `backend/app/tests/test_book_stream.py` | Create | 5 | C3 Range cases + C4 traversal |
+| `backend/app/tests/test_book_upload.py` | Create | 5 | Happy path + rejection |
 
 ---
+
+# PART A — Hotfix + leaf modules
+
+Part A makes the tree safe and builds the four pure leaf modules the fused rewrite consumes. Task 0 fixes the shipped 500s and schema leak in place; Tasks 1–4 ship one unit-tested module each, all with their own commit. Nothing in Part A touches HTTP behavior beyond the Task 0 defect fixes. Each task is green independently — Part B reuses their outputs without modifying them.
 
 ### Task 0: `file_type` hotfix + `cover_url` move
 
@@ -65,7 +96,7 @@ Tests use the committed fixtures at `backend/app/tests/conftest.py` (`361bb48`):
   - `BookService.search_books(title, tags, book_type, extension) -> list[BookBase]` — `file_type` parameter removed
   - `BookRead.cover_url` present; `BookBase`/`BookCreate` without `cover_url`
 
-**Why:** `Book.file_type` does not exist — the column is `book_type`. Three live sites raise `AttributeError` (500) today, and a fourth threads the dead param through the service signature. Fix the tree before refactoring, rather than carrying shipped 500s through six more commits.
+**Why (learning):** `Book.file_type` does not exist — the column is `book_type`. Three live sites raise `AttributeError` (500) today, and a fourth threads the dead param through the service signature. Fix the tree before refactoring, rather than carrying shipped 500s through six more commits.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -208,7 +239,7 @@ git commit -m "fix: map search file_type to book_type; move cover_url to BookRea
   - `BookNotFound(BookError)`, `InvalidBookFile(BookError)`, `BookAlreadyExists(BookError)`, `CoverGenerationFailed(BookError)`
   - `ContentValidator.validate(file_bytes: bytes, filename: str) -> str` — returns the lowercase extension; raises `InvalidBookFile` on empty bytes, disallowed extension, magic-byte mismatch, or size over `MAX_UPLOAD_SIZE`
 
-**Why:** The domain exception hierarchy and the upload gate are the two leaves every later module depends on. Both are pure Python — no HTTP, no `open()`, no DB — so they are unit-testable in isolation and the tree stays green.
+**Why (learning):** The domain exception hierarchy and the upload gate are the two leaves every later module depends on. Both are pure Python — no HTTP, no `open()`, no DB — so they are unit-testable in isolation and the tree stays green.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -399,7 +430,7 @@ git commit -m "feat: add book domain errors and ContentValidator upload gate"
   - `BookFileStorage.resolve(rel_path: str) -> Path` — resolves under `UPLOAD_DIR`; raises `BookNotFound` if the result escapes `UPLOAD_DIR` or the file is absent (the C4 fix)
   - `BookFileStorage.cover_dir: Path` — read-only accessor for `COVER_DIR` (consumed by Task 5's cover call)
 
-**Why:** `resolve()` centralises path-traversal containment so the router can never open a book file except through the guard. A DB-supplied `file_path` joined naively to `UPLOAD_DIR` escapes via `..` — today the tree is safe only because the write path incidentally strips traversal. One guard, unit-testable in isolation, instead of duplicated per call site.
+**Why (learning):** `resolve()` centralises path-traversal containment so the router can never open a book file except through the guard. A DB-supplied `file_path` joined naively to `UPLOAD_DIR` escapes via `..` — today the tree is safe only because the write path incidentally strips traversal. One guard, unit-testable in isolation, instead of duplicated per call site.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -483,7 +514,7 @@ Expected: FAIL at collection with `ModuleNotFoundError: No module named 'app.ser
 
 - [ ] **Step 3: Create `BookFileStorage`**
 
-> **Settings import note:** current tree code uses `from app import settings` (`book_service.py:9`); hygiene S1 changes it to `from app.config import settings`. New modules use the S1 form below so S1 does not rewrite them later.
+> **Settings import note:** hygiene S1 landed (commit `467beee`) — the tree already uses `from app.config import settings` everywhere. The form below is the only form; there is no legacy call site to reconcile.
 
 Create `backend/app/services/book_file_storage.py`:
 
@@ -611,7 +642,7 @@ git commit -m "feat: add BookFileStorage with UPLOAD_DIR traversal containment"
   - `@dataclass(frozen=True) BookMetadata` — `title: str | None`, `author: str | None`, `language: str | None`, `tags: list[str]`
   - `EpubMetadataReader.read(path: Path) -> BookMetadata | None` — returns `None` on a corrupt or missing file; never raises
 
-**Why:** Replaces the god class's epub-tag logic with a total function whose `None` return lets the service layer (Task 5) own the filename/user-input fallback.
+**Why (learning):** Replaces the god class's epub-tag logic with a total function whose `None` return lets the service layer (Task 5) own the filename/user-input fallback.
 
 **Naming contract — read carefully:** the dataclass field is **`tags`**, not `subjects`. Task 5b consumes `epub_meta.tags`. (An earlier draft of this plan named it `subjects`; that name is retired to match the shipped dataclass.)
 
@@ -782,7 +813,7 @@ git commit -m "feat: add EpubMetadataReader leaf module with EPUB metadata tests
 - Produces:
   - `CoverGenerator.generate(source_path: Path, dest_dir: Path) -> bool` — writes the cover into the `dest_dir` **directory**, named `{source_path.stem}.png` (the stem is the book uid per Task 2's `save`). Returns `True` only when a cover lands within `settings.MAX_COVER_SIZE`; `False` on ANY failure; never raises.
 
-**Why:** Replaces `_generate_thumbnail` with the spec's `-> bool` contract: a stub or corrupt upload degrades to a missing cover, never a failed upload.
+**Why (learning):** Replaces `_generate_thumbnail` with the spec's `-> bool` contract: a stub or corrupt upload degrades to a missing cover, never a failed upload.
 
 **Signature contract — read carefully:** the second parameter is a **directory** (`dest_dir`), and the method derives the filename from `source_path.stem`. Task 5b calls it as `generate(source_path, storage.cover_dir)`. (An earlier draft passed a full file path; that is retired.)
 
@@ -1122,6 +1153,10 @@ git commit -m "feat: add CoverGenerator leaf module with cover generation tests"
 
 ---
 
+# PART B — Fused rewrite and final gate
+
+**Part A is complete when Tasks 0–4 are green.** Each Part A module is a pure leaf — no HTTP, no router, no composition — and every one ships with passing unit tests. Task 5 is the single commit where the leaves are wired into a rewritten repo/service/router; do not start it until the Part A steps are green, because Task 5's red-first tests fail against the old tree and the Part A commits are what let you isolate a regression to wiring rather than to a leaf.
+
 ### Task 5: FUSED rewrite of `BookRepo` + `BookService` + `book_router` (single commit)
 
 **Files:**
@@ -1157,7 +1192,7 @@ Produces:
 - `BookService.get_book_file(book_uid) -> Path`
 - Router: `POST /books/upload`, `GET /books/` (`Page[BookRead]`), `GET /books/{book_uid}`, `PUT /books/{book_uid}`, `DELETE /books/{book_uid}` (204), `GET /books/{book_uid}/stream` (RFC 7233). **Deleted:** `GET /books/search/` (replaced by `GET /books/`), `GET /books/{book_uid}/epub` and `/read` (replaced by the single stream endpoint; epub→pdf conversion has no module in the approved design and is dropped).
 
-**Why:** Fused into one commit on purpose: rewriting `BookRepo` deletes `search_books` and `get_all_books`, which `book_service.py:33,47` and `book_router.py:81` still call. Splitting the three files across commits leaves commits where `GET /books/search/` raises `AttributeError` at call time — and the old plan's import-only gate passes anyway. One commit keeps every point in history importable and runnable, which matters because `git pull && cat STATE.md` is the cross-machine resume path. Three separated steps (5a/5b/5c) with a mypy gate after each keep it reviewable; a single commit at the end. Red-first tests come first (5a-i) and fail against the old code — intended TDD ordering, not a broken gate.
+**Why (learning):** Fused into one commit on purpose: rewriting `BookRepo` deletes `search_books` and `get_all_books`, which `book_service.py:33,47` and `book_router.py:81` still call. Splitting the three files across commits leaves commits where `GET /books/search/` raises `AttributeError` at call time — and the old plan's import-only gate passes anyway. One commit keeps every point in history importable and runnable, which matters because `git pull && cat STATE.md` is the cross-machine resume path. Three separated steps (5a/5b/5c) with a mypy gate after each keep it reviewable; a single commit at the end. Red-first tests come first (5a-i) and fail against the old code — intended TDD ordering, not a broken gate.
 
 - [ ] **Step 5a-i: Write the failing tests**
 
@@ -1239,7 +1274,7 @@ def test_search_pagination_pages_are_disjoint_and_complete(db) -> None:
     assert all(page.total == 5 for page in pages)
 ```
 
-Create `backend/app/tests/test_book_stream.py`. Note: `app/tests/` has no `__init__.py`, so conftest helpers are not importable — replicate the two-line login flow inline:
+Create `backend/app/tests/test_book_stream.py`. Note: conftest helpers (`setup_admin`/`login`/`auth_headers`) have been importable since hygiene S1 landed, but the two-line login flow is replicated inline anyway — deliberately, so the probe carries zero dependency on `conftest.py`'s internals and a helper signature change cannot confound a red-failure diagnosis:
 
 ```python
 """Red-first probes for Task 5: C3 RFC 7233 Range streaming, C4 traversal."""
@@ -2118,7 +2153,7 @@ git commit -m "refactor: fuse BookRepo/BookService/book_router — criteria sear
 - Consumes: the Definition of Done command set from `AGENTS.md`; the repo-wide baseline (103 mypy errors / 24 files; 120 ruff errors)
 - Produces: a green, formatted, linted, type-scoped tree; refreshed graphify output; final commit
 
-**Why:** The refactor is only done when the repo's own Definition of Done has actually run and the output has been seen — a completion claim without command output is a guess. The `print(` sweep is the residual of the old plan's Task 16, folded in here: old `book_service.py` carried a dozen `print()` debug calls, and the sweep proves none survived the rewrite. mypy is scoped to changed files only — the 103-error baseline is pre-existing debt, logged in STATE.md, not fixed here.
+**Why (learning):** The refactor is only done when the repo's own Definition of Done has actually run and the output has been seen — a completion claim without command output is a guess. The `print(` sweep is the residual of the old plan's Task 16, folded in here: old `book_service.py` carried a dozen `print()` debug calls, and the sweep proves none survived the rewrite. mypy is scoped to changed files only — the 103-error baseline is pre-existing debt, logged in STATE.md, not fixed here.
 
 - [ ] **Step 1: Format and lint**
 
@@ -2174,12 +2209,52 @@ git commit -m "chore: final gate — format, lint, scoped mypy, print sweep, gra
 
 ---
 
+## Learning Annex — cross-cutting concepts
+
+Task-specific reasoning lives in each task's **Why (learning)** section. These are the themes that recur across this plan.
+
+1. **Extensions lie; magic bytes don't.** A filename is user input masquerading as metadata. `.exe` renamed to `.pdf` sails past any extension-only check, and a stored file whose bytes are garbage 500s later at render time. ContentValidator sniffs the first bytes AND rejects before any byte reaches disk — validation is a gate, not a label.
+
+2. **Containment is one gate, not a policy per call site.** The stream endpoint must never open a file except through `resolve()`. Centralizing the `..`-escape check in `BookFileStorage` makes the C4 fix unit-testable in isolation and makes it impossible for a future endpoint to forget the check — the same lesson as hygiene's `settings` anchoring: invariants belong in the layer that owns them.
+
+3. **`-> bool` must be allowed to return `False`.** Cover generation is best-effort by contract: a stub or corrupt upload degrades to a missing cover, never a failed upload. The alternative — catch-and-raise — turns an expected degradation into a 500 that the fallback logic can never recover from. Exceptions are for exceptional cases.
+
+4. **Red tests must name the defect.** Task 0's probe fails with `AttributeError: type object 'Book' has no attribute 'file_type'` — the exact failure mode it fixes. A test that fails for configuration reasons is worse than no test: it teaches you to ignore red. Every Step 2 here names the expected failure before the fix.
+
+5. **Total functions own their fallback.** `EpubMetadataReader.read` returns `None` on any corrupt/missing input so the service layer — the one place with access to filename and user input — decides the fallback. A raising reader would force every caller to duplicate try/except; a `None`-returning one splits "did it parse" from "what do we do if not".
+
+6. **One commit keeps history runnable.** `git pull && cat STATE.md` is the resume path across machines; a commit where `GET /books/search/` raises `AttributeError` at call time breaks it. Task 5 is fused on purpose: partway through rewriting `BookRepo`, the service and router that still call the old methods must be rewritten too — a split commit would leave a permanently broken checkout point for zero review benefit.
+
+7. **Search semantics are measured, not assumed.** `joinedload` + LIMIT returned 1 book for `limit=2`; the tags join fanned rows out and `count(*)` reported 3 for 2 books; missing `ORDER BY` let Postgres repeat a row on one page and skip it on another. None of these were discoverable by reading code — each required a probe against postgres:16-alpine. The docstrings carry the measurements because the next refactor will re-derive the temptation.
+
+8. **Tests protect behavior; migrations protect data — and neither is a stand-in for the other.** The harness keeps `create_all` while dev/prod move to Alembic (hygiene S5) precisely so a broken migration cannot masquerade as a behavior regression. This plan exploits the split in one direction: it touches no schema, so it ships without a migration, and the data in an existing `books` table survives the rewrite untouched.
+
+## Deferred Work — preserved for a later pass
+
+Cut from this plan to keep the scope on the book feature. Everything below was verified against the tree on 2026-08-20 and is **still open**. Nothing here is lost; it is a ready-to-execute backlog.
+
+### D1: Audio / video / tag test suites + the delete-missing 500
+- **Bug:** `audio_repo.py:17-22` `delete_audio` and `video_repo.py:18-23` `delete_video` dereference `None.deleted_at` when the id does not exist → 500. Fix: raise `ValueError(f"... {id} does not exist")`, map to 404 in `audio_router.py:122-126` and `video_router.py:111-114`.
+- **Tests needed:** repo tests for soft-delete semantics (`deleted_at`) and API tests for upload / upload_multiple / list-excludes-deleted / patch / stream / delete-404.
+- **Structure debt:** tag logic still lives inline in `tag_router.py` (Invariant 1) — a tag service + repo belong with these suites.
+- **Note:** must run against Postgres via the testcontainers harness — JSONB/GIN are not expressible in SQLite.
+
+### D2: Features dropped by design, for deliberate resurrection
+- **Cover replacement on PUT** — no image validator exists in the Task 1–4 module set, so the old cover-upload branch had no safe home (Task 5b "Dropped, stated honestly" (a)). Re-add behind a PNG/JPEG magic-byte validator if wanted.
+- **epub→pdf conversion + `GET /books/{uid}/read`** — no converter module exists in the approved design; Task 5c deletes `/read` and `/epub`. Resurrection requires a converter module and its security review, not the old inline code.
+
+### D3: `TagRepo` SQLAlchemy 2.0 conversion
+Task 5a rewrites `BookRepo` to 2.0 `select()` and retires the last `query()` call site in the book module. `TagRepo` remains legacy — a small follow-up on the same pattern, verifiable once D1's tag tests land, exactly as the auth tests made `a034adf` safe.
+
 ## Self-Review
 
+- **Scope check:** the user asked for the book feature refactor. Part A (Tasks 0–4) is the defect hotfix plus the pure leaf modules; Part B (Tasks 5–6) is the fused rewrite and the Definition of Done gate. Audio/video/tag work and the dropped features are in the Deferred Work annex, preserved verbatim. The one crossover with hygiene is nothing this plan writes — Part A *consumes* S1's package markers, S3's anchored dirs, and the S2 single manifest.
 - **Spec coverage:** C1 search fix → Task 5a ✓; C3 Range grammar → Task 5c + `test_book_stream.py` ✓; C4 traversal containment → Task 2 `resolve()` + Task 5c ✓; I1 `cover_url` on write schema → Task 0 ✓; I5 `ORDER BY` + disjoint pagination → Task 5a ✓; module decomposition (5 modules) → Tasks 1–4 + Task 5b ✓; `RoleChecker` → Task 5c ✓; error mapping router-only → Task 5c ✓.
+- **Verified against the tree, 2026-08-20:** every defect, file, and line number in the Current State table was confirmed by grep/`wc -l` on this date; the stale claims in the previous revision and the 2026-07-03 ancestor are documented in the Corrections table (the ancestor was recovered via `git show 7ef380a^:docs/plans/2026-07-03-book-refactor-plan.md`).
 - **Placeholder scan:** no TBD/TODO; every code step carries complete paste-ready code; every command has an Expected output.
 - **Type consistency:** `BookMetadata.tags` (not `subjects`) — Task 3 produces, Task 5b consumes ✓. `CoverGenerator.generate(source_path, dest_dir)` directory form — Task 4 produces, Task 5b calls `generate(resolve(rel_path), storage.cover_dir)` ✓. `BookFileStorage.cover_dir`/`delete_cover` — Task 2 produces, Task 5b consumes ✓. `Page[BookRead]` from `search` — Task 5a produces, Task 5c returns ✓. `BookService(...)` constructor with five dependencies — Task 5b defines, Task 5c `get_book_service` wires ✓.
 - **Interface reconciliation note:** the three contributing batches were drafted independently and carried three cross-module mismatches (field name `subjects` vs `tags`; cover `dest_dir` directory vs file path; `cover_dir`/`delete_cover` referenced before they existed). All three are reconciled in this document: Task 2 exposes `cover_dir` + `delete_cover`, Task 3's field is `tags`, Task 4's `generate` takes a directory.
+- **Known risks:** (1) Task 5's red-first tests run against the old tree and fail with legacy-shaped errors — that is intended TDD ordering, not a broken gate; (2) Part A asserts the modules stay out of `app/services/__init__.py` — an eager export there would import them before their tests exist; (3) `CoverGenerator._extract_epub_cover` opens the archive with stdlib `zipfile` — an EPUB with a malicious zip comment/bomb is bounded by `MAX_UPLOAD_SIZE` at the validator, but a follow-up could add zip member-size limits; (4) Task 5 relies on subtle SQL semantics (`selectinload`, `tags.any()`, `@>` containment) that were only verified against postgres:16-alpine — the repo docstrings carry the measurements so they survive.
 
 ## Execution Handoff
 
