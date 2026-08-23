@@ -1,10 +1,11 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-import app.models
+from app import models  # noqa: F401
 from app.api import (
     audio_router,
     auth_router,
@@ -14,13 +15,12 @@ from app.api import (
     video_router,
 )
 from app.config import settings
-from app.database import Base, engine
+from app.database import engine
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
-    Base.metadata.create_all(bind=engine)
     settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     settings.COVER_DIR.mkdir(parents=True, exist_ok=True)
     settings.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
@@ -60,5 +60,5 @@ app.include_router(setup_router.router)
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {"message": "Welcome to Jirani Offline Library Backend"}

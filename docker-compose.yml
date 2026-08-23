@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
-  jirani-backend:
+  backend:
     build:
       context: .
       dockerfile: backend/Dockerfile

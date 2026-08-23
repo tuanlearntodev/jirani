@@ -318,7 +318,6 @@ Expected: sync succeeds against `backend/uv.lock`; tests still `1 passed`.
 **Files:**
 - Modify: `backend/app/config.py` (add `AUDIO_DIR`, `VIDEO_DIR`), `backend/app/api/audio_router.py` (2 sites), `backend/app/api/video_router.py` (1 site), `backend/app/main.py` (lifespan)
 - Untrack: root `uploads/audio/*.mp3`, `*.wav`
-
 **Interfaces:**
 - Consumes: `settings.BASE_DIR`-anchored paths
 - Produces: `settings.AUDIO_DIR` / `settings.VIDEO_DIR`; all four upload dirs created at startup; no CWD-relative filesystem writes; zero tracked binaries
@@ -550,8 +549,8 @@ Everything listed is either a host-specific artifact or a secret. `backend/data/
 - [x] **Step 4: Build and verify**
 
 ```bash
-docker compose build jirani-backend
-docker compose run --rm --entrypoint sh jirani-backend -c "python --version && uv run --no-sync python -c 'import fastapi, sqlalchemy; print(\"deps ok\")'"
+docker compose build backend
+docker compose run --rm --entrypoint sh backend -c "python --version && uv run --no-sync python -c 'import fastapi, sqlalchemy; print(\"deps ok\")'"
 ```
 
 Expected: `Python 3.13.x` and `deps ok`. If `uv sync --frozen` fails with a lock mismatch, run `cd backend && uv lock` and commit the updated lock — that failure means `pyproject.toml` and `uv.lock` genuinely disagree, which is exactly what `--frozen` exists to catch.
@@ -559,7 +558,7 @@ Expected: `Python 3.13.x` and `deps ok`. If `uv sync --frozen` fails with a lock
 - [x] **Step 5: Confirm the entrypoint is actually running**
 
 ```bash
-docker compose run --rm jirani-backend sh -c 'ls -d /app/uploads/*'
+docker compose run --rm backend sh -c 'ls -d /app/uploads/*'
 ```
 
 Expected: all four directories listed, created by the entrypoint rather than the Dockerfile's `mkdir`. This is the check the old plan never made.
@@ -597,7 +596,7 @@ git commit -m "chore: build image with uv on python 3.13, wire entrypoint, drop 
 
 *Why tests deliberately do NOT use migrations.* `backend/app/tests/conftest.py` keeps per-test `drop_all` / `create_all`. It is fast (~100ms), perfectly isolated, and immune to migration drift. If tests ran migrations, a bad migration would fail every test in the suite and you could not tell a behavior regression from a schema problem. **Migrations protect data; tests protect behavior.** Keeping them separate keeps failures diagnosable. The tradeoff is real and worth stating: migrations are then not exercised by the test suite, so Step 5's explicit upgrade-against-empty check is the thing standing in for that coverage. Do not skip it.
 
-- [ ] **Step 1: Scaffold**
+- [x] **Step 1: Scaffold**
 
 ```bash
 cd backend && uv run alembic init migrations
@@ -605,7 +604,7 @@ cd backend && uv run alembic init migrations
 
 Creates `alembic.ini` and `migrations/` with `env.py`, `script.py.mako`, and an empty `versions/`.
 
-- [ ] **Step 2: Rewrite `backend/migrations/env.py`**
+- [x] **Step 2: Rewrite `backend/migrations/env.py`**
 
 ```python
 from logging.config import fileConfig
@@ -663,7 +662,7 @@ Two details that matter, both consequences of Task S1:
 - `import app.models` must execute **before** `target_metadata` is read. After S1 removed the eager imports from `app/__init__.py`, importing `app.database` alone gives you an *empty* `Base.metadata`, and autogenerate would emit `drop_table` for every model. This is the same explicit-registration point as `main.py`, for the same reason.
 - `set_main_option` overrides the URL hardcoded in `alembic.ini` with the application's settings, so migrations and the app can never target different databases. **Configuration should have one source; the `.ini` is a fallback, not a second truth.**
 
-- [ ] **Step 3: Adjust `backend/alembic.ini`**
+- [x] **Step 3: Adjust `backend/alembic.ini`**
 
 Change only the `[alembic]` section:
 
@@ -676,7 +675,7 @@ prepend_sys_path = .
 
 **Keep the `[loggers]` / `[handlers]` / `[formatters]` sections the generator wrote.** `fileConfig(config.config_file_name)` in `env.py` parses them; deleting them makes every migration run crash with a `configparser.NoSectionError`.
 
-- [ ] **Step 4: Generate the baseline against an EMPTY database**
+- [x] **Step 4: Generate the baseline against an EMPTY database**
 
 ```bash
 docker compose up -d db
@@ -688,17 +687,22 @@ cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/jirani_
 
 Note this is a *different* Postgres instance from the one the tests use (compose vs. testcontainers). That is deliberate and temporary — the baseline needs a stable, inspectable, empty database. Do not try to generate it against the throwaway test container.
 
-- [ ] **Step 5: Review the generated migration — do not skip this**
+- [x] **Step 5: Review the generated migration — do not skip this**
 
 ```bash
 ls backend/migrations/versions/
 grep -E "create_table|create_index|op.drop" backend/migrations/versions/*_initial_schema.py
 ```
 
-Expected: `create_table` for all **10** tables — `accounts`, `books`, `tags`, `book_tags`, `audio`, `audio_tags`, `video`, `video_tags`, plus any remaining join tables — the `roleenum` type, and the GIN index on the book JSONB column.
+Expected: `create_table` for all **8** tables (`accounts`, `books`, `tags`, `audio`, `video` + the three join tables `audio_tags`, `book_tags`, `video_tags`), the `roleenum` type, and the GIN index on the book JSONB column.
 
-Two red flags:
-- **Any `op.drop_*` in a baseline migration** means the target DB was not empty. Re-run Step 4's `DROP SCHEMA`.
+Two red flags — check them with a **function-scoped** grep:
+
+```bash
+awk '/def upgrade/,/def downgrade/' backend/migrations/versions/*_initial_schema.py | grep "op.drop" || echo "clean"
+```
+
+- **Any `op.drop_*` inside `upgrade()`** means the target DB was not empty. (Do NOT grep the whole file — every valid migration's `downgrade()` legitimately drops everything `upgrade()` created; that is the walk-back path, not a red flag.) Re-run Step 4's `DROP SCHEMA` and regenerate.
 - **A missing table** means `env.py` did not import its model. Confirm it is exported from `app/models/__init__.py`.
 
 Then verify the migration actually runs on an empty DB:
@@ -711,7 +715,7 @@ docker compose exec db psql -U postgres -d jirani_test -c "\dt"
 
 Expected: all tables present, plus `alembic_version`.
 
-- [ ] **Step 6: Adopt the existing dev database with `stamp`**
+- [x] **Step 6: Adopt the existing dev database with `stamp`** *(run 2026-08-23 — `alembic_version` = `70ee18aafdca`, matching the baseline hash; no DDL ran)*
 
 ```bash
 cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/jirani_library uv run alembic stamp head
@@ -720,7 +724,7 @@ docker compose exec db psql -U postgres -d jirani_library -c "SELECT version_num
 
 Expected: the revision hash prints. **No DDL runs and no data is touched** — this is the safety-critical step. If you accidentally run `upgrade` instead of `stamp` here, it will fail on `CREATE TABLE ... already exists`; that failure is harmless, but re-read this step before retrying.
 
-- [ ] **Step 7: Remove `create_all` from `backend/app/main.py`**
+- [x] **Step 7: Remove `create_all` from `backend/app/main.py`**
 
 The lifespan becomes:
 
@@ -740,7 +744,9 @@ Delete `Base.metadata.create_all(bind=engine)` and drop `Base` from the `from ap
 
 *Concept:* the application should not mutate its own schema at startup. Schema changes are a deploy-time operation with different privileges, different failure handling, and a different audit trail than serving requests. Conflating them means every replica races to migrate on boot.
 
-- [ ] **Step 8: Wire migrations into the container**
+> **Deviation (approved 2026-08-23):** the plan's "Keep `import app.models`" binds the name `app`, colliding under `mypy --strict` with the module-level `app = FastAPI(...)` (Module-vs-FastAPI `[assignment]` + cascading `[attr-defined]`). Fixed in the same edit: `import app.models as models  # noqa: F401` (side effect retained, binding renamed), plus explicit annotations `-> AsyncIterator[None]` on `lifespan` and `-> dict[str, str]` on `root`. Spirit of the step unchanged; main.py now passes the gate on its own lines.
+
+- [x] **Step 8: Wire migrations into the container**
 
 `docker/entrypoint.sh`:
 
@@ -764,7 +770,7 @@ COPY backend/migrations ./migrations
 
 With `set -e`, a failed migration aborts the container before uvicorn starts. That is the desired behavior: **fail loudly on a bad schema rather than serving traffic against one.**
 
-- [ ] **Step 9: End-to-end verification from a clean volume**
+- [ ] **Step 9: End-to-end verification from a clean volume** *(deferred — destructive `docker compose down -v`; awaiting explicit go-ahead)*
 
 ```bash
 docker compose down -v
@@ -776,7 +782,7 @@ curl -s localhost:8000/ | grep -q "Welcome" && echo "API OK"
 
 Expected: the revision hash prints and `API OK`. **`down -v` destroys the dev volume** — intentional here, since the whole point is proving a fresh environment builds itself from migrations. Do not run this against anything you care about.
 
-- [ ] **Step 10: Full suite + commit**
+- [x] **Step 10: Full suite + commit**
 
 ```bash
 cd backend && uv run pytest -v
@@ -848,7 +854,7 @@ Note under known risks:
 cd backend && uv run ruff format . && uv run ruff check . --fix --ignore B008
 cd backend && uv run mypy app/config.py app/main.py app/__init__.py --strict 2>&1 | tail -20
 cd backend && uv run pytest -v
-docker compose build jirani-backend
+docker compose build backend
 ```
 
 Expected: ruff clean; mypy reports only pre-existing errors (log them, do not fix unrelated files); tests pass; image builds.
