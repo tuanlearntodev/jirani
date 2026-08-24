@@ -857,7 +857,7 @@ cd backend && uv run pytest -v
 docker compose build backend
 ```
 
-Expected: ruff clean **or** all remaining errors present in the Part B Debt Ledger annex with a named owning task; mypy reports only pre-existing errors, logged per the ledger rather than an informal STATE.md note; tests pass; image builds. **The S6 run is the ledger's zero point — re-running this gate is the Part B completion criterion.**
+Expected: ruff clean or only pre-existing errors (log them in STATE.md, do not fix unrelated files); tests pass; image builds. The S6 snapshot below is the reference point for the remaining debt.
 
 - [x] **Step 5: Commit**
 
@@ -873,7 +873,7 @@ git commit -m "chore: document structure decisions, pin ruff/mypy config"
 
 # PART B — Auth system
 
-> **Debt Coverage Model (approved 2026-08-23).** Every task below carries the same lint/type gate: the files it touches end the task with **0 `ruff` + 0 `mypy --strict` errors** (`uv run ruff check <files> --ignore B008`, `uv run mypy <files> --strict`). Pre-existing errors in touched files are this task's debt to clear, not a reason to log-and-skip. **Part B Debt Ledger** (S6-snapshot, ruff 0.16.3):
+> **Debt snapshots (approved 2026-08-23 — reference, not a maintained ledger).** Every task below carries the gate: the files it touches end the task with **0 `ruff` + 0 `mypy --strict` errors** (`uv run ruff check <files> --ignore B008`, `uv run mypy <files> --strict`). Pre-existing errors in touched files are that task's debt to clear. The table records the S6 zero point (ruff 0.16.3) with a named owner per file, so no error is orphaned — it is a snapshot for orientation, not an audit trail to maintain:
 >
 > | File | ruff | mypy | Owning task |
 > |---|---|---|---|
@@ -886,11 +886,11 @@ git commit -m "chore: document structure decisions, pin ruff/mypy config"
 > | `app/config.py` | 0 | 2 | A4 |
 > | `app/database.py` | 0 | 1 | A4 |
 >
-> Rows owned by other plans live in that plan's copy of this ledger (book-plan rows in `2026-08-16-book-refactor.md`; `audio_router`/`video_router`/audio-video repos + models plus the tag module — `tag_router`/`tag_repo`/`tag_schema` — are owned by a **future audio/video/tag plan**, per the user's 2026-08-23 carve-out, mirroring book-plan D1). A row is struck when its owner zeroes it; a red row without a named owner fails the Part B completion gate.
+> Files not owned here belong to the book plan (`2026-08-16-book-refactor.md`) — and `audio_router`/`video_router`, the audio/video repos + models, and the tag module (`tag_router`/`tag_repo`/`tag_schema`) are owned by a **future audio/video/tag plan** (user carve-out 2026-08-23, mirroring book-plan D1). Red rows on other plans' files are expected until those plans run.
 
 ### Task A1: Lock the auth behavior contract (`verify_password` + RBAC)
 
-> **Lint/type gate:** touched files (`auth_service.py`, `auth_router.py`, `account.py`) end at 0 ruff + 0 mypy and their ledger rows are refreshed or struck — `verify_password` becomes `-> bool`-honest and `create_user`'s signature work must not leave untyped call sites behind.
+> **Lint/type gate:** touched files (`auth_service.py`, `auth_router.py`, `account.py`) end at 0 ruff + 0 `mypy --strict`; `verify_password` becomes `-> bool`-honest and `create_user`'s signature work must not leave untyped call sites.
 
 **Files:**
 - Modify: `backend/app/services/auth_service.py` (`verify_password`, `create_user`, `bulk_create_users`)
@@ -1116,7 +1116,7 @@ git commit -m "fix: auth defects — verify_password returns bool, RBAC on creat
 
 ### Task A2: Password rules, reset semantics, `/setup` race, literal prefixes
 
-> **Lint/type gate:** touched files (`auth_service.py`, `auth_router.py`, `setup_router.py`, `dependencies/auth.py`, `role_enum.py`) end at 0 ruff + 0 mypy; strike their ledger rows (counts → own).
+> **Lint/type gate:** touched files (`auth_service.py`, `auth_router.py`, `setup_router.py`, `dependencies/auth.py`, `role_enum.py`) end at 0 ruff + 0 `mypy --strict`.
 
 **Files:**
 - Modify: `backend/app/services/auth_service.py` (`validate_credentials`, `reset_password`, `get_all_users`)
@@ -1398,7 +1398,7 @@ git commit -m "fix: reset-password 403 + first_login semantics, student min-4 ru
 
 ### Task A3: Complete the auth repo + API test suite
 
-> **Lint/type gate:** the tests this task writes are new files — they must end at 0 ruff + 0 mypy like production files; ledger rows owned by A1/A2 may not re-appear in this task's touched set.
+> **Lint/type gate:** tests are production files too — the new test module ends at 0 ruff + 0 `mypy --strict`, and no new violations in touched files.
 
 **Files:**
 - Modify: `backend/app/tests/test_auth.py` (append repo + HTTP integration tests)
@@ -1809,10 +1809,10 @@ Expected: ruff clean; mypy reports only pre-existing errors (log in STATE.md); f
 - Verify-only: nothing else — the fixes stay local, but both files are imported by every layer, so their type signals propagate
 
 **Interfaces:**
-- Consumes: Part B Debt Ledger rows for `config.py` / `database.py`
-- Produces: both files green under `mypy --strict`; ledger rows struck (`counts → 0`)
+- Consumes: the S6 snapshot rows for `config.py` / `database.py`
+- Produces: both files green under `mypy --strict`
 
-**Why (learning):** this is the "100% coverage" amendment (2026-08-23): the two files every router imports are the last Part B-owned rows without a task. The defects have the same shape as S6's `main.py` cascade — a public function without a return annotation makes every caller an untyped context, and the call-site error is a symptom of the definition-site omission:
+**Why (learning):** the two files every router imports are the last Part B files with open type debt. The defects have the same shape as S6's `main.py` cascade — a public function without a return annotation makes every caller an untyped context, and the call-site error is a symptom of the definition-site omission:
 - `config.py:56` — function missing a type annotation (`[no-untyped-def]`)
 - `config.py:62` — `Settings()` called from that untyped function (`[no-untyped-call]` — the cascade)
 - `database.py:19` — function missing a return type annotation (`[no-untyped-def]`)
@@ -1839,7 +1839,7 @@ cd backend && uv run mypy app/config.py app/database.py --strict
 cd backend && uv run pytest -v
 ```
 
-Expected: ruff clean (0), mypy 0, suite green (`1 passed`). Strike the two ledger rows, then commit: `chore: type-clean config.py and database.py`.
+Expected: ruff clean (0), mypy 0, suite green (`1 passed`). Commit: `chore: type-clean config.py and database.py`.
 
 - [ ] **Step 4: Re-run the S6 gate**
 
@@ -1848,7 +1848,7 @@ cd backend && uv run ruff format . && uv run ruff check . --fix --ignore B008
 cd backend && uv run mypy app/config.py app/main.py app/__init__.py --strict 2>&1 | tail -5
 ```
 
-Expected: the only remaining errors are ledger rows owned by the book plan, the future audio/video/tag plan, or rows this task's audit declares struck. **Part B is complete when the S6 gate is green modulo named owners.**
+Expected: the only remaining errors are in files owned by the book plan or the future audio/video/tag plan (named in the snapshot above). **Part B is complete when the S6 gate is green except those named files.**
 
 ---
 

@@ -77,9 +77,9 @@ The prior revision of this document — and its ancestor `docs/plans/2026-07-03-
 
 ---
 
-## Debt Coverage Annex (approved 2026-08-23)
+## Debt Coverage Annex (approved 2026-08-23 — reference snapshot, not a maintained ledger)
 
-Every task in this plan carries the same lint/type gate: the files it touches end the task with **0 `ruff` + 0 `mypy --strict` errors** (`uv run ruff check <files> --ignore B008`, `uv run mypy <files> --strict`). New violations fail the task; pre-existing errors in a touched file are this task's debt to clear, not a reason to log-and-skip. **This plan's ledger** (S6-snapshot 2026-08-23, ruff 0.16.3 — the auto-fix pass already consumed the fixable half):
+Every task in this plan carries the same lint/type gate: the files it touches end the task with **0 `ruff` + 0 `mypy --strict` errors** (`uv run ruff check <files> --ignore B008`, `uv run mypy <files> --strict`). New violations fail the task; pre-existing errors in a touched file are that task's debt to clear. The table records the S6 snapshot (ruff 0.16.3 — the auto-fix pass already consumed the fixable half) with a named owner per file for orientation:
 
 | File | ruff | mypy | Owning task |
 |---|---|---|---|
@@ -93,7 +93,7 @@ Every task in this plan carries the same lint/type gate: the files it touches en
 | `app/repositories/tag_repo.py` | 0 | 2 | — |
 | `app/api/tag_router.py` | 0 | 1 | — |
 
-The last four rows (tag module) plus `audio_router`/`video_router`/audio-video repos + models are owned by the **future audio/video/tag plan** (user 2026-08-23, mirroring D1's bundle) — they are legal red rows here, not this plan's debt. Hygiene's own rows (`auth_*`, `setup_router`, `dependencies/auth`, `config.py`, `database.py`) live in the hygiene plan's copy of this ledger. **Task 6 audits the ledger: zero red rows owned by this plan; every other row names its owner.**
+The tag module plus `audio_router`/`video_router`/audio-video repos + models are owned by the **future audio/video/tag plan** (user 2026-08-23, mirroring D1's bundle), and the auth/config/database files by the hygiene plan — red rows on other plans' files are expected until those plans run. **Task 6 verifies this plan's own files are clean.**
 
 # PART A — Hotfix + leaf modules
 
@@ -101,7 +101,7 @@ Part A makes the tree safe and builds the four pure leaf modules the fused rewri
 
 ### Task 0: `file_type` hotfix + `cover_url` move
 
-> **Lint/type gate:** touched files end at 0 ruff + 0 mypy; `book_schema.py`/`book_repo.py` ledger rows refresh (the `cover_url` move and the rename touch are the first bites).
+> **Lint/type gate:** touched files end at 0 ruff + 0 `mypy --strict` — the `cover_url` move and the rename touch are the first bites at `book_schema.py`/`book_repo.py`.
 
 **Files:**
 - Modify: `backend/app/repositories/book_repo.py:103-136`
@@ -247,7 +247,7 @@ git commit -m "fix: map search file_type to book_type; move cover_url to BookRea
 
 ### Task 1: `book_errors.py` + `ContentValidator`
 
-> **Lint/type gate:** the new modules are new files — they ship clean (0/0); the final lint+commit step covers them, and no ledger row may regress.
+> **Lint/type gate:** the new modules are new files — they ship clean (0/0); the final lint+commit step covers them, and no new violations in touched files.
 
 **Files:**
 - Create: `backend/app/services/book_errors.py`
@@ -439,7 +439,7 @@ git commit -m "feat: add book domain errors and ContentValidator upload gate"
 
 ### Task 2: `BookFileStorage` (incl. `resolve()` containment)
 
-> **Lint/type gate:** ships clean (0/0) — the storage module is the pattern Tasks 3–4 copy; no ledger row may regress.
+> **Lint/type gate:** ships clean (0/0) — the storage module is the pattern Tasks 3–4 copy; no new violations in touched files.
 
 **Files:**
 - Create: `backend/app/services/book_file_storage.py`
@@ -1187,7 +1187,7 @@ git commit -m "feat: add CoverGenerator leaf module with cover generation tests"
 
 ### Task 5: FUSED rewrite of `BookRepo` + `BookService` + `book_router` (single commit)
 
-> **Lint/type gate — the big one:** `book_service.py` (15 ruff / 17 mypy), `book_router.py` (3 / 22), `book_repo.py` (2 / 1 — the B904 `raise` sites and the `query().first()` return) and `book_schema.py` reach 0/0 by this task's final lint step; strike their ledger rows.
+> **Lint/type gate — the big one:** `book_service.py` (15 ruff / 17 mypy), `book_router.py` (3 / 22), `book_repo.py` (2 / 1 — the B904 `raise` sites and the `query().first()` return) and `book_schema.py` reach 0/0 by this task's final lint step.
 
 **Files:**
 - Rewrite: `backend/app/repositories/book_repo.py`
@@ -2228,7 +2228,7 @@ Expected: `graphify update` completes (AST-only, no API cost). Dirty `graphify-o
 
 - [ ] **Step 6: Final audit + verify, then STATE.md**
 
-Run `/audit` (invariant-auditor over the accumulated diff since Task 0) and `/verify` (full DoD). On PASS/PASS: **ledger audit** — every Annex row owned by this plan reads `0`; red rows owned by the hygiene plan or the future audio/video/tag plan are named with their owner. Then invoke the `state` skill — record Tasks 0–6 complete in `STATE.md`, log the named-owner rows under open items, and note the two dropped features (cover replacement on PUT; epub→pdf conversion + `/read`) so a future plan can resurrect them deliberately.
+Run `/audit` (invariant-auditor over the accumulated diff since Task 0) and `/verify` (full DoD). On PASS/PASS: confirm this plan's own files are clean (the Annex names which files still belong to other plans). Then invoke the `state` skill — record Tasks 0–6 complete in `STATE.md`, log the remaining errors on other plans' files (named in the Annex) under open items, and note the two dropped features (cover replacement on PUT; epub→pdf conversion + `/read`) so a future plan can resurrect them deliberately.
 
 - [ ] **Step 7: Final commit**
 
