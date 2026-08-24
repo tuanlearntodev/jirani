@@ -803,7 +803,7 @@ Tests must still pass: conftest uses `create_all` directly and is unaffected by 
 
 Pinning ruff and mypy config in `pyproject.toml` is the same principle as Step S1's pytest config: **the tool's behavior should be a property of the repository, not of the invoking shell.** Otherwise your editor, your terminal, and CI each apply different rules and you get formatting churn in every diff.
 
-- [ ] **Step 1: Rewrite the README "Notes" section**
+- [x] **Step 1: Rewrite the README "Notes" section**
 
 ```markdown
 ## Notes
@@ -824,7 +824,7 @@ Pinning ruff and mypy config in `pyproject.toml` is the same principle as Step S
   `VIDEO_DIR`, all anchored to `backend/`. Never use a relative path for file I/O.
 ```
 
-- [ ] **Step 2: Add tool config to `backend/pyproject.toml`**
+- [x] **Step 2: Add tool config to `backend/pyproject.toml`**
 
 ```toml
 [tool.ruff]
@@ -840,7 +840,7 @@ python_version = "3.13"
 
 (`I` = import sorting, `UP` = pyupgrade for 3.13 idioms, `B` = bugbear. B008 stays in `select` but is suppressed per-command while the pre-existing debt is unaddressed — FastAPI's `Depends()` default-argument idiom trips it by design.)
 
-- [ ] **Step 3: Record the deferred items in STATE.md**
+- [x] **Step 3: Record the deferred items in STATE.md**
 
 Note under known risks:
 - Book/audio/video/tag modules still have **zero test coverage** — see the Deferred Work annex
@@ -848,7 +848,7 @@ Note under known risks:
 - Old DB rows written with CWD-relative paths may 404 on stream until re-uploaded
 - Root `uploads/` is orphaned (or was merged — record which option Task S3 Step 6 took)
 
-- [ ] **Step 4: Structure-phase gate**
+- [x] **Step 4: Structure-phase gate**
 
 ```bash
 cd backend && uv run ruff format . && uv run ruff check . --fix --ignore B008
@@ -857,9 +857,9 @@ cd backend && uv run pytest -v
 docker compose build backend
 ```
 
-Expected: ruff clean; mypy reports only pre-existing errors (log them, do not fix unrelated files); tests pass; image builds.
+Expected: ruff clean **or** all remaining errors present in the Part B Debt Ledger annex with a named owning task; mypy reports only pre-existing errors, logged per the ledger rather than an informal STATE.md note; tests pass; image builds. **The S6 run is the ledger's zero point — re-running this gate is the Part B completion criterion.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 graphify update .
@@ -873,7 +873,24 @@ git commit -m "chore: document structure decisions, pin ruff/mypy config"
 
 # PART B — Auth system
 
+> **Debt Coverage Model (approved 2026-08-23).** Every task below carries the same lint/type gate: the files it touches end the task with **0 `ruff` + 0 `mypy --strict` errors** (`uv run ruff check <files> --ignore B008`, `uv run mypy <files> --strict`). Pre-existing errors in touched files are this task's debt to clear, not a reason to log-and-skip. **Part B Debt Ledger** (S6-snapshot, ruff 0.16.3):
+>
+> | File | ruff | mypy | Owning task |
+> |---|---|---|---|
+> | `app/services/auth_service.py` | 2 | 6 | A1 (verify_password/create_user rewrite) + A2 residuals |
+> | `app/api/auth_router.py` | 7 | 4 | A2 |
+> | `app/api/setup_router.py` | 1 | 1 | A2 |
+> | `app/dependencies/auth.py` | 1 | 4 | A2 |
+> | `app/models/account.py` | 0 | 1 | A1/A2 |
+> | `app/models/role_enum.py` | 1 | 0 | A2 (`UP042`) |
+> | `app/config.py` | 0 | 2 | A4 |
+> | `app/database.py` | 0 | 1 | A4 |
+>
+> Rows owned by other plans live in that plan's copy of this ledger (book-plan rows in `2026-08-16-book-refactor.md`; `audio_router`/`video_router`/audio-video repos + models plus the tag module — `tag_router`/`tag_repo`/`tag_schema` — are owned by a **future audio/video/tag plan**, per the user's 2026-08-23 carve-out, mirroring book-plan D1). A row is struck when its owner zeroes it; a red row without a named owner fails the Part B completion gate.
+
 ### Task A1: Lock the auth behavior contract (`verify_password` + RBAC)
+
+> **Lint/type gate:** touched files (`auth_service.py`, `auth_router.py`, `account.py`) end at 0 ruff + 0 mypy and their ledger rows are refreshed or struck — `verify_password` becomes `-> bool`-honest and `create_user`'s signature work must not leave untyped call sites behind.
 
 **Files:**
 - Modify: `backend/app/services/auth_service.py` (`verify_password`, `create_user`, `bulk_create_users`)
@@ -1098,6 +1115,8 @@ git commit -m "fix: auth defects — verify_password returns bool, RBAC on creat
 ---
 
 ### Task A2: Password rules, reset semantics, `/setup` race, literal prefixes
+
+> **Lint/type gate:** touched files (`auth_service.py`, `auth_router.py`, `setup_router.py`, `dependencies/auth.py`, `role_enum.py`) end at 0 ruff + 0 mypy; strike their ledger rows (counts → own).
 
 **Files:**
 - Modify: `backend/app/services/auth_service.py` (`validate_credentials`, `reset_password`, `get_all_users`)
@@ -1378,6 +1397,8 @@ git commit -m "fix: reset-password 403 + first_login semantics, student min-4 ru
 ---
 
 ### Task A3: Complete the auth repo + API test suite
+
+> **Lint/type gate:** the tests this task writes are new files — they must end at 0 ruff + 0 mypy like production files; ledger rows owned by A1/A2 may not re-appear in this task's touched set.
 
 **Files:**
 - Modify: `backend/app/tests/test_auth.py` (append repo + HTTP integration tests)
@@ -1781,6 +1802,56 @@ Expected: ruff clean; mypy reports only pre-existing errors (log in STATE.md); f
 
 ---
 
+### Task A4: Residual type debt — `config.py` + `database.py`
+
+**Files:**
+- Modify: `backend/app/config.py` (2 errors), `backend/app/database.py` (1 error)
+- Verify-only: nothing else — the fixes stay local, but both files are imported by every layer, so their type signals propagate
+
+**Interfaces:**
+- Consumes: Part B Debt Ledger rows for `config.py` / `database.py`
+- Produces: both files green under `mypy --strict`; ledger rows struck (`counts → 0`)
+
+**Why (learning):** this is the "100% coverage" amendment (2026-08-23): the two files every router imports are the last Part B-owned rows without a task. The defects have the same shape as S6's `main.py` cascade — a public function without a return annotation makes every caller an untyped context, and the call-site error is a symptom of the definition-site omission:
+- `config.py:56` — function missing a type annotation (`[no-untyped-def]`)
+- `config.py:62` — `Settings()` called from that untyped function (`[no-untyped-call]` — the cascade)
+- `database.py:19` — function missing a return type annotation (`[no-untyped-def]`)
+
+Fixes are annotation-only (read the call sites in `main.py` / `migrations/env.py` before choosing the exact type). No setting names, no URLs, no behavior changes.
+
+- [ ] **Step 1: Reproduce**
+
+```bash
+cd backend && uv run mypy app/config.py app/database.py --strict
+```
+
+Expected: exactly the 3 errors above (2 in `config.py` + 1 in `database.py`).
+
+- [ ] **Step 2: Fix**
+
+Annotate the two functions at `config.py:56` and `database.py:19` with the type their call sites require, then re-run Step 1 until 0. If mypy surfaces further errors inside `config.py`/`database.py` once the cascade clears, fix those too — the file set is the boundary.
+
+- [ ] **Step 3: Gate + commit**
+
+```bash
+cd backend && uv run ruff check app/config.py app/database.py --ignore B008
+cd backend && uv run mypy app/config.py app/database.py --strict
+cd backend && uv run pytest -v
+```
+
+Expected: ruff clean (0), mypy 0, suite green (`1 passed`). Strike the two ledger rows, then commit: `chore: type-clean config.py and database.py`.
+
+- [ ] **Step 4: Re-run the S6 gate**
+
+```bash
+cd backend && uv run ruff format . && uv run ruff check . --fix --ignore B008
+cd backend && uv run mypy app/config.py app/main.py app/__init__.py --strict 2>&1 | tail -5
+```
+
+Expected: the only remaining errors are ledger rows owned by the book plan, the future audio/video/tag plan, or rows this task's audit declares struck. **Part B is complete when the S6 gate is green modulo named owners.**
+
+---
+
 ## Learning Annex — cross-cutting concepts
 
 Task-specific reasoning lives in each task's **Why (learning)** section. These are the themes that recur across several tasks.
@@ -1832,7 +1903,7 @@ Cosmetic, but it touches on-disk layout, the Dockerfile `mkdir`, and existing DB
 
 ## Self-Review
 
-- **Scope check:** the user asked for folder-structure system design first, then auth. Part A (S1–S6) is structure; Part B (A1–A3) is auth; the book/audio/video/tag work is in Deferred. The one deliberate crossover is S3 touching `audio_router.py` and `video_router.py` — path anchoring only, no behavior change, and their bugs stay in D2.
+- **Scope check:** the user asked for folder-structure system design first, then auth. Part A (S1–S6) is structure; Part B (A1–A3 auth, A4 residual `config.py`/`database.py` type debt); the book/audio/video/tag work is in Deferred. The one deliberate crossover is S3 touching `audio_router.py` and `video_router.py` — path anchoring only, no behavior change, and their bugs stay in D2.
 - **Ordering dependencies:** S1 (packaging) → everything, because `app.tests` must be a package before A1's helper imports and `import app.models` must be explicit before S5's autogenerate. S2 (manifests) → S4, since the Dockerfile installs from the lock S2 keeps. S4 (entrypoint wiring) → S5, since migrations run from the entrypoint S4 makes live. A1 → A2 → A3, since A2 builds on `create_user`'s new signature and A3 assumes both.
 - **Verified against the tree:** every file path, line number, and defect in this plan was confirmed on 2026-08-15. Five errors in the previous revision are documented in the Corrections table.
 - **Placeholder scan:** no TBD/TODO. Every step has literal code or an exact command plus expected output.

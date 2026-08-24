@@ -18,7 +18,7 @@ Every task implicitly includes all of the following. Exact values copied from th
 
 - `requires-python = ">=3.13"`; run all commands with `uv run` from `backend/`
 - Tests run against the testcontainers Postgres harness — **Docker daemon must be running**; no `docker compose up -d db` needed for tests
-- `ruff check` with `--ignore B008` on changed files; `mypy --strict` on changed files only, against the measured baseline (103 errors / 24 files). Log pre-existing failures in STATE.md; do not fix unrelated files
+- `ruff check` with `--ignore B008` on changed files; `mypy --strict` on changed files only, per the **Debt Coverage Annex** below — it replaces the old "103 errors / 24 files" baseline with a per-file ledger, and every row has an owning task. Log pre-existing failures owned by *other* plans in STATE.md; do not fix unrelated files
 - Commit after every task; message style from git log: `test:`, `fix:`, `chore:`, `feat:`
 - Never delete a failing test to make the suite pass — fix the underlying logic (AGENTS.md)
 - After the final task, run `graphify update .` (AST-only)
@@ -77,11 +77,31 @@ The prior revision of this document — and its ancestor `docs/plans/2026-07-03-
 
 ---
 
+## Debt Coverage Annex (approved 2026-08-23)
+
+Every task in this plan carries the same lint/type gate: the files it touches end the task with **0 `ruff` + 0 `mypy --strict` errors** (`uv run ruff check <files> --ignore B008`, `uv run mypy <files> --strict`). New violations fail the task; pre-existing errors in a touched file are this task's debt to clear, not a reason to log-and-skip. **This plan's ledger** (S6-snapshot 2026-08-23, ruff 0.16.3 — the auto-fix pass already consumed the fixable half):
+
+| File | ruff | mypy | Owning task |
+|---|---|---|---|
+| `app/services/book_service.py` | 15 | 17 | 0 (hotfix lines) → 5 (fused rewrite) |
+| `app/api/book_router.py` | 3 | 22 | 5 |
+| `app/repositories/book_repo.py` | 2 | 1 | 0 (rename touch) → 5 (2.0 rewrite) |
+| `app/schemas/book_schema.py` | 0 | 2 | 0 (`cover_url` move) |
+| `app/models/book.py`, `book_tag.py` | 0 | 3 | 5/6 |
+| `app/models/tag.py` | 0 | 1 | — | 
+| `app/schemas/tag_schema.py` | 2 | 0 | — |
+| `app/repositories/tag_repo.py` | 0 | 2 | — |
+| `app/api/tag_router.py` | 0 | 1 | — |
+
+The last four rows (tag module) plus `audio_router`/`video_router`/audio-video repos + models are owned by the **future audio/video/tag plan** (user 2026-08-23, mirroring D1's bundle) — they are legal red rows here, not this plan's debt. Hygiene's own rows (`auth_*`, `setup_router`, `dependencies/auth`, `config.py`, `database.py`) live in the hygiene plan's copy of this ledger. **Task 6 audits the ledger: zero red rows owned by this plan; every other row names its owner.**
+
 # PART A — Hotfix + leaf modules
 
 Part A makes the tree safe and builds the four pure leaf modules the fused rewrite consumes. Task 0 fixes the shipped 500s and schema leak in place; Tasks 1–4 ship one unit-tested module each, all with their own commit. Nothing in Part A touches HTTP behavior beyond the Task 0 defect fixes. Each task is green independently — Part B reuses their outputs without modifying them.
 
 ### Task 0: `file_type` hotfix + `cover_url` move
+
+> **Lint/type gate:** touched files end at 0 ruff + 0 mypy; `book_schema.py`/`book_repo.py` ledger rows refresh (the `cover_url` move and the rename touch are the first bites).
 
 **Files:**
 - Modify: `backend/app/repositories/book_repo.py:103-136`
@@ -226,6 +246,8 @@ git commit -m "fix: map search file_type to book_type; move cover_url to BookRea
 ---
 
 ### Task 1: `book_errors.py` + `ContentValidator`
+
+> **Lint/type gate:** the new modules are new files — they ship clean (0/0); the final lint+commit step covers them, and no ledger row may regress.
 
 **Files:**
 - Create: `backend/app/services/book_errors.py`
@@ -416,6 +438,8 @@ git commit -m "feat: add book domain errors and ContentValidator upload gate"
 ---
 
 ### Task 2: `BookFileStorage` (incl. `resolve()` containment)
+
+> **Lint/type gate:** ships clean (0/0) — the storage module is the pattern Tasks 3–4 copy; no ledger row may regress.
 
 **Files:**
 - Create: `backend/app/services/book_file_storage.py`
@@ -632,6 +656,8 @@ git commit -m "feat: add BookFileStorage with UPLOAD_DIR traversal containment"
 
 ### Task 3: `EpubMetadataReader`
 
+> **Lint/type gate:** ships clean (0/0); `-> BookMetadata | None` must be honored by annotation, not suppressed.
+
 **Files:**
 - Create: `backend/app/services/epub_metadata_reader.py`
 - Test: `backend/app/tests/test_book_epub_reader.py`
@@ -803,6 +829,8 @@ git commit -m "feat: add EpubMetadataReader leaf module with EPUB metadata tests
 ---
 
 ### Task 4: `CoverGenerator`
+
+> **Lint/type gate:** ships clean (0/0); `-> bool` must be typed to allow `False` (best-effort contract).
 
 **Files:**
 - Create: `backend/app/services/cover_generator.py`
@@ -1158,6 +1186,8 @@ git commit -m "feat: add CoverGenerator leaf module with cover generation tests"
 **Part A is complete when Tasks 0–4 are green.** Each Part A module is a pure leaf — no HTTP, no router, no composition — and every one ships with passing unit tests. Task 5 is the single commit where the leaves are wired into a rewritten repo/service/router; do not start it until the Part A steps are green, because Task 5's red-first tests fail against the old tree and the Part A commits are what let you isolate a regression to wiring rather than to a leaf.
 
 ### Task 5: FUSED rewrite of `BookRepo` + `BookService` + `book_router` (single commit)
+
+> **Lint/type gate — the big one:** `book_service.py` (15 ruff / 17 mypy), `book_router.py` (3 / 22), `book_repo.py` (2 / 1 — the B904 `raise` sites and the `query().first()` return) and `book_schema.py` reach 0/0 by this task's final lint step; strike their ledger rows.
 
 **Files:**
 - Rewrite: `backend/app/repositories/book_repo.py`
@@ -2150,7 +2180,7 @@ git commit -m "refactor: fuse BookRepo/BookService/book_router — criteria sear
 - Modify: `STATE.md` (via the `state` skill)
 
 **Interfaces:**
-- Consumes: the Definition of Done command set from `AGENTS.md`; the repo-wide baseline (103 mypy errors / 24 files; 120 ruff errors)
+- Consumes: the Definition of Done command set from `AGENTS.md`; the Debt Coverage Annex ledger plus the hygiene plan's copy (auth/config/database rows) and the future audio/video/tag plan's rows; the S6 snapshot (36 ruff / 104 mypy errors repo-wide before this plan starts)
 - Produces: a green, formatted, linted, type-scoped tree; refreshed graphify output; final commit
 
 **Why (learning):** The refactor is only done when the repo's own Definition of Done has actually run and the output has been seen — a completion claim without command output is a guess. The `print(` sweep is the residual of the old plan's Task 16, folded in here: old `book_service.py` carried a dozen `print()` debug calls, and the sweep proves none survived the rewrite. mypy is scoped to changed files only — the 103-error baseline is pre-existing debt, logged in STATE.md, not fixed here.
@@ -2162,7 +2192,7 @@ cd backend && uv run ruff format .
 cd backend && uv run ruff check . --fix --ignore B008
 ```
 
-Expected: format reports files unchanged or reformats them — either is fine; `ruff check` ends with no remaining errors other than pre-existing ones in files this plan never touched. If `--fix` touches an untouched file, include it in the commit and note it.
+Expected: format reports files unchanged or reformats them — either is fine; `ruff check` ends with no remaining errors other than ledger rows owned by the hygiene plan or the future audio/video/tag plan. If `--fix` touches a file outside this plan's ledger, include it in the commit and note it.
 
 - [ ] **Step 2: Type-check the changed files only**
 
@@ -2170,7 +2200,7 @@ Expected: format reports files unchanged or reformats them — either is fine; `
 cd backend && uv run mypy app/repositories/book_repo.py app/services/book_service.py app/api/book_router.py app/services/book_errors.py app/services/content_validator.py app/services/book_file_storage.py app/services/epub_metadata_reader.py app/services/cover_generator.py app/schemas/book_schema.py --strict
 ```
 
-Expected: 0 errors in these files. Do **not** run `mypy . --strict` as a gate — the 103-error / 24-file baseline is out of scope. If a changed file surfaces a pre-existing error in an untouched dependency, log it in STATE.md; do not fix the unrelated file.
+Expected: 0 errors in these files. Do **not** run `mypy . --strict` as a gate — rows owned by the hygiene plan and the future audio/video/tag plan are out of scope (both are named owners in the Annex). If a changed file surfaces a pre-existing error in an untouched dependency, log it in STATE.md; do not fix the unrelated file.
 
 - [ ] **Step 3: Full test suite**
 
@@ -2198,7 +2228,7 @@ Expected: `graphify update` completes (AST-only, no API cost). Dirty `graphify-o
 
 - [ ] **Step 6: Final audit + verify, then STATE.md**
 
-Run `/audit` (invariant-auditor over the accumulated diff since Task 0) and `/verify` (full DoD). On PASS/PASS: invoke the `state` skill — record Tasks 0–6 complete in `STATE.md`, log the untouched baseline debt (103 mypy errors / 24 files, remaining ruff baseline) under open items, and note the two dropped features (cover replacement on PUT; epub→pdf conversion + `/read`) so a future plan can resurrect them deliberately.
+Run `/audit` (invariant-auditor over the accumulated diff since Task 0) and `/verify` (full DoD). On PASS/PASS: **ledger audit** — every Annex row owned by this plan reads `0`; red rows owned by the hygiene plan or the future audio/video/tag plan are named with their owner. Then invoke the `state` skill — record Tasks 0–6 complete in `STATE.md`, log the named-owner rows under open items, and note the two dropped features (cover replacement on PUT; epub→pdf conversion + `/read`) so a future plan can resurrect them deliberately.
 
 - [ ] **Step 7: Final commit**
 

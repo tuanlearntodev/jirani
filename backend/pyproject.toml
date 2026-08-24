@@ -33,3 +33,14 @@ dev = [
 testpaths = ["app/tests"]
 pythonpath = ["."]
 addopts = "-q --tb=short"
+
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.13"
