@@ -1,5 +1,5 @@
 ---
-description: Runs the Definition of Done gate (ruff format, ruff check, mypy, pytest) and reports pass/fail with only the failing output. Use before claiming any work is complete, and before committing.
+description: Runs the Definition of Done gate (ruff format, ruff check, mypy, pytest, TDD red-evidence) and reports pass/fail with only the failing output. Use before claiming any work is complete, and before committing.
 mode: subagent
 model: opencode/deepseek-v4-flash
 temperature: 0
@@ -47,6 +47,7 @@ Details that determine whether this works at all:
 - **Distinguish pre-existing from new.** mypy errors in files the change did not touch are pre-existing — list them separately and do not count them as failures of this change.
 - If a command fails in a way that makes later commands meaningless (e.g. a syntax error breaking collection), run the rest anyway and note the cascade.
 - **Check the plan tick.** If the changed files complete a task in `docs/superpowers/plans/`, confirm that task's box was flipped to `[x]` in the working tree. A code change with an unticked box is `NOT DONE` until the tick is staged. See AGENTS.md "Tick the plan box in the same commit".
+- **Check the TDD gate.** Per AGENTS.md "Test-Driven Development (binding)": every new/changed function needs a test that was witnessed failing (red) before the code made it pass (green). Ask the caller (or read the plan task / brief) for the recorded red evidence — the failing command and output that predated the implementation. A change with no red evidence — except a declared characterization pin over legacy code ("RED-FIRST: none — characterization pin" in the brief, or a plan task marked as a pin) — is `NOT DONE` for the TDD gate even if all four commands pass.
 
 ## Output format
 
@@ -58,6 +59,7 @@ ruff check      PASS | FAIL | NOT RUN
 mypy (strict)   PASS | FAIL | NOT RUN   [files: a.py, b.py]
 pytest          PASS | FAIL | NOT RUN   [N passed, M failed]
 plan box ticked YES | NO | N/A (no plan task completed)
+tdd red-evidence YES | NO | N/A (characterization pin / no production code)
 
 --- FAILURES ---
 <full verbatim output of failing commands only; omit this section entirely if all pass>

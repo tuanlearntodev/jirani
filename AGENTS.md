@@ -129,6 +129,7 @@ GOAL: <one sentence>
 FILES:
   <path> — <exact change or full replacement code>
 VERIFY: <command, run from backend/ with uv run>
+RED-FIRST: <test file that must fail first + expected red reason, or "none — characterization pin">
 INVARIANTS: <which of the six this touches, or "none">
 ---
 ```
@@ -138,6 +139,7 @@ Rules for the brief:
 - **Self-contained.** No "as discussed above" — there is no above for the coder.
 - **Exact code, not descriptions.** If the brief says "add a field", the cheap model decides the field name. Give it the code.
 - **A runnable VERIFY command** the coder can execute without you.
+- **Red-first.** For new behavior or bugfixes the brief leads with the failing test (`RED-FIRST`) and the VERIFY command must be expected to fail before the implementation exists; with the test shown to fail red, then the implementation, then green. Characterization pins over existing legacy code get `RED-FIRST: none — characterization pin`.
 - Only brief when implementation cost is real. A one-line edit or a config flag is not worth the handoff.
 
 After the coder reports back: run `/audit` against the diff, then `/verify`, then commit. The coder never commits.
@@ -161,7 +163,7 @@ Six rules. Breaking one requires explicit approval, and you must say which one y
 | 2 | **Error mapping:** services raise domain exceptions; **only routers** translate them. `ValueError`→400, `PermissionError`→403, not-found→404, `IntegrityError`→400. The same rule returns the same status on every endpoint. | `/auth/reset-password` leaks `PermissionError` → 500 |
 | 3 | **No CWD-relative file I/O.** Every filesystem path derives from `app/config.py` settings anchored to `BASE_DIR`. Never a bare relative string. | `audio_router.py:41,76`, `video_router.py:14` |
 | 4 | **SQLAlchemy 2.0** (`Mapped[]`, `mapped_column`, `select()`) in all new or modified code. Legacy 1.x is grandfathered only until its module gets tests. | `Audio`/`Video` models and join tables; `BookRepo`, `TagRepo` still use `query()` |
-| 5 | **Tests run on PostgreSQL** via testcontainers — never SQLite (JSONB/GIN are not expressible there). Never delete a failing test to go green. Write characterization tests before refactoring untested code. | book, audio, video, tag modules have zero tests |
+| 5 | **Tests run on PostgreSQL** via testcontainers — never SQLite (JSONB/GIN are not expressible there). Never delete a failing test to go green. Write characterization tests before refactoring untested code. TDD per the Test-Driven Development section: characterization first on legacy code, red-green-refactor for new behavior and bugfixes. | book, audio, video, tag modules have zero tests |
 | 6 | **Naming:** `PascalCase` classes with no underscores; `snake_case` for functions and modules. | `Audio_Repo`, `Video_Repo`, `Audio_Create`, `Video_Create` |
 
 ## Repository Structure
@@ -199,6 +201,46 @@ Advisory, not binding — apply judgment. Each of these is a lesson already paid
 - **Prefer the specific operation.** `startswith()` over `like(f"{x}%")` — the general one makes user input load-bearing on wildcard characters.
 - **Functions must be correct on their own terms.** Do not depend on a decorator in another file to make a branch unreachable.
 - **Deleting dead code is a contribution.** Untested dead code invites future callers to trust it. Git is the archive.
+
+## Test-Driven Development (binding)
+
+The superpowers `test-driven-development` skill (Iron Law, red-green-refactor)
+governs any feature, bugfix, or behavior change. Invoke it with the `skill`
+tool before writing code for one.
+
+**The Iron Law.** No production code without a failing test first. A test that
+passes immediately on first run proves nothing — it is asserting existing
+behavior, not the change. Tests written after the code describe what the code
+does; tests written first describe what it must do.
+
+**Red-Green-Refactor.** (1) RED: write one failing test for one behavior.
+(2) Verify it fails, and for the expected reason — `ModuleNotFoundError` for a
+missing module, `AssertionError` for wrong behavior — not a typo. (3) GREEN:
+minimal code to pass. (4) Verify the suite is green, then (5) REFACTOR, keeping
+the suite green. Repeat. Commit after each completed cycle; never commit
+production code whose test was not witnessed failing first.
+
+**Characterization first for legacy code.** Refactoring untested code
+(audio/video/tag today) starts by pinning current behavior with
+characterization tests — including known-broken behavior, recorded as
+documented bugs — then refactors under the pin, fixing each bug red-first. Do
+not skip the pin to "get going"; a refactor without it silently drops behavior
+you did not know existed.
+
+**Plans are written red-green.** Every plan task that produces code has the
+book-refactor shape: write failing test → run and record the red output →
+implement → run and record green → lint/type → commit. The book-refactor plan
+Tasks 0–5 (`docs/superpowers/plans/2026-08-16-book-refactor.md`) is the
+reference pattern.
+
+**Coder briefs are red-first.** The brief block names the failing test as the
+first artifact and a VERIFY command expected to fail before implementation. A
+brief that starts with implementation code is invalid; hand it back.
+
+**DoD gate.** "Every new/changed function is covered by a test that was
+witnessed failing (red) before the code made it pass (green)" is part of the
+Definition of Done. `verifier` reports this gate; a change whose plan task or
+brief records no red evidence (outside characterization pins) is NOT DONE.
 
 ## State Management
 
