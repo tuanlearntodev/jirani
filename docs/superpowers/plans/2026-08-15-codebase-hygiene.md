@@ -888,6 +888,8 @@ git commit -m "chore: document structure decisions, pin ruff/mypy config"
 >
 > Files not owned here belong to the book plan (`2026-08-16-book-refactor.md`) — and `audio_router`/`video_router`, the audio/video repos + models, and the tag module (`tag_router`/`tag_repo`/`tag_schema`) are owned by a **future audio/video/tag plan** (user carve-out 2026-08-23, mirroring book-plan D1). Red rows on other plans' files are expected until those plans run.
 
+> **Learner mode (2026-08-24):** Part B's full implementations were deliberately removed at the user's request, same as the book plan. The `Why (learning)` sections survive intact and are the primary material — read them like a lecture before each step. What remains per step: the *contract* (signatures, exception types, status codes, expected red errors), run commands, commit messages, and samples of the novel idioms. The complete paste-ready revision lives in this file's git history before this edit. TDD is binding (AGENTS.md): each "write the failing test" step must go red before the fix.
+
 ### Task A1: Lock the auth behavior contract (`verify_password` + RBAC)
 
 > **Lint/type gate:** touched files (`auth_service.py`, `auth_router.py`, `account.py`) end at 0 ruff + 0 `mypy --strict`; `verify_password` becomes `-> bool`-honest and `create_user`'s signature work must not leave untyped call sites.
@@ -923,27 +925,18 @@ Expected: passing. Part A's S1 made `app.tests` a real package, so the helper im
 
 - [ ] **Step 2: Write the failing `verify_password` tests**
 
-Append to `backend/app/tests/test_auth.py`:
+Append to `backend/app/tests/test_auth.py`. Two cases:
+1. `test_verify_password_wrong_password_returns_false` — hash `"right-password"` with `AuthService.get_password_hash(...)`, then assert `verify_password("wrong-password", hashed) is False`
+2. `test_verify_password_correct_returns_true` — same hash, right password → `is True`
 
+These are pure static-method tests — no DB, no fixtures. Sample (write the second yourself):
 ```python
-import pytest
-
-from app.models import RoleEnum
-from app.schemas import AccountCreateRequest
 from app.services import AuthService
-
 
 def test_verify_password_wrong_password_returns_false() -> None:
     hashed = AuthService.get_password_hash("right-password")
     assert AuthService.verify_password("wrong-password", hashed) is False
-
-
-def test_verify_password_correct_returns_true() -> None:
-    hashed = AuthService.get_password_hash("right-password")
-    assert AuthService.verify_password("right-password", hashed) is True
 ```
-
-These are pure static-method tests — no DB, no fixtures.
 
 - [ ] **Step 3: Run and watch it fail**
 
@@ -955,28 +948,7 @@ Expected: `test_verify_password_wrong_password_returns_false` FAILS with `ValueE
 
 - [ ] **Step 4: Fix `verify_password` (`auth_service.py:59-63`)**
 
-Replace:
-
-```python
-    @staticmethod
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        if pwd_context.verify(plain_password, hashed_password):
-            return True
-        raise ValueError("Invalid password format.")
-```
-
-with:
-
-```python
-    @staticmethod
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Return True on match, False on mismatch.
-
-        Only raises if the *stored* hash is malformed, which is a real
-        programming error rather than a failed login.
-        """
-        return pwd_context.verify(plain_password, hashed_password)
-```
+Hint: the whole `if/raise` structure collapses to one expression. `pwd_context.verify` already returns the bool you want and already raises on a genuinely malformed stored hash — the docstring should say exactly that (match → `True`, mismatch → `False`, malformed stored hash → raises on its own). Write the one-line body yourself; the essence is: stop interfering.
 
 - [ ] **Step 5: Green**
 
@@ -988,46 +960,19 @@ Expected: 2 passed. `authenticate_user`'s dead `return None` branch is now reach
 
 - [ ] **Step 6: Write the failing RBAC tests**
 
-Add the helper and tests:
+Add a `service_for(db)` helper — it constructs `AuthService(AuthRepo(db))` (sample below) — then three tests, each calling `service_for(db).create_user(AccountCreateRequest(username=..., role=..., first_name="A", last_name="B"), user_role=...)`:
 
+1. `test_create_admin_via_service_raises_value_error` — `role=admin` with `user_role=admin` → `pytest.raises(ValueError)`
+2. `test_create_teacher_by_teacher_raises_permission_error` — `role=teacher` with `user_role=teacher` → `pytest.raises(PermissionError)`
+3. `test_create_teacher_by_admin_ok` — `role=teacher` with `user_role=admin` → returns, `account.role == RoleEnum.teacher`
+
+Note `PermissionError` and `ValueError` are Python builtins — no import needed.
 ```python
 def service_for(db) -> AuthService:
     from app.repositories import AuthRepo
 
     return AuthService(AuthRepo(db))
-
-
-def test_create_admin_via_service_raises_value_error(db) -> None:
-    with pytest.raises(ValueError):
-        service_for(db).create_user(
-            AccountCreateRequest(
-                username="boss", role=RoleEnum.admin, first_name="A", last_name="B"
-            ),
-            user_role=RoleEnum.admin,
-        )
-
-
-def test_create_teacher_by_teacher_raises_permission_error(db) -> None:
-    with pytest.raises(PermissionError):
-        service_for(db).create_user(
-            AccountCreateRequest(
-                username="tea2", role=RoleEnum.teacher, first_name="A", last_name="B"
-            ),
-            user_role=RoleEnum.teacher,
-        )
-
-
-def test_create_teacher_by_admin_ok(db) -> None:
-    account, _ = service_for(db).create_user(
-        AccountCreateRequest(
-            username="tea3", role=RoleEnum.teacher, first_name="A", last_name="B"
-        ),
-        user_role=RoleEnum.admin,
-    )
-    assert account.role == RoleEnum.teacher
 ```
-
-Note `PermissionError` and `ValueError` are Python builtins — no import needed.
 
 - [ ] **Step 7: Run — three distinct failures**
 
@@ -1039,43 +984,14 @@ Expected: all three fail with `TypeError: create_user() got an unexpected keywor
 
 - [ ] **Step 8: Fix `create_user` (`auth_service.py:80-105`)**
 
-```python
-    def create_user(
-        self, metadata: AccountCreateRequest, user_role: RoleEnum
-    ) -> tuple[Account, str]:
-        existing_user = self.get_user_by_username(metadata.username)
-        if existing_user:
-            raise ValueError(f"Username '{metadata.username}' is already taken.")
-        if metadata.role == RoleEnum.admin:
-            raise ValueError("Admin accounts can only be created via /setup.")
-        if metadata.role == RoleEnum.teacher and user_role != RoleEnum.admin:
-            raise PermissionError("Only admins can create teacher accounts.")
+Add the `user_role: RoleEnum` parameter (`-> tuple[Account, str]`), then write **five guards before any work** — validate first, mutate second, so a rejected request never leaves a partial write:
+1. existing username → `ValueError("... already taken.")`
+2. `metadata.role == RoleEnum.admin` → `ValueError` (only `/setup` bootstraps admins)
+3. `metadata.role == teacher and user_role != admin` → `PermissionError`
+4. password policy: student → `generate_student_password()` + `first_login=False`; teacher → `generate_teacher_password()` + `first_login=True`; anything else → `ValueError` (only student/teacher are creatable here)
+5. hash, build `Account(...)`, `self.auth_repo.create_account(new_account)`, return `(account, password)`
 
-        if metadata.role == RoleEnum.student:
-            password = self.generate_student_password()
-            first_login = False
-        elif metadata.role == RoleEnum.teacher:
-            password = self.generate_teacher_password()
-            first_login = True
-        else:
-            raise ValueError(
-                "Only student and teacher accounts can be created via this endpoint."
-            )
-
-        hashed_password = self.get_password_hash(password)
-        new_account = Account(
-            username=metadata.username,
-            hashed_password=hashed_password,
-            role=metadata.role,
-            first_name=metadata.first_name,
-            last_name=metadata.last_name,
-            first_login=first_login,
-        )
-        self.auth_repo.create_account(new_account)
-        return new_account, password
-```
-
-Guards come before any work — **validate first, mutate second**, so a rejected request never leaves a partial write.
+Hint: the existing body already has the duplicate-username guard and the account build — you are inserting the three authorization guards in front and threading `user_role` through the signature. The exact exception types are contract (ValueError→400, PermissionError→403): get them wrong and the router maps wrong.
 
 - [ ] **Step 9: Align `bulk_create_users` (`auth_service.py:171-172`)**
 
@@ -1147,11 +1063,12 @@ git commit -m "fix: auth defects — verify_password returns bool, RBAC on creat
 
 - [ ] **Step 1: Failing tests for the student password rule**
 
+Two tests against the static `AuthService.validate_credentials(role, password, context="self_change")`:
+1. `test_student_self_change_accepts_4_char_word` — `"cats"` must NOT raise (today `"cats"` is rejected: `isdigit()` rejects it)
+2. `test_student_self_change_rejects_3_chars` — `"cat"` raises `ValueError`
+
+Sample of the rejection idiom (write the counterpart yourself):
 ```python
-def test_student_self_change_accepts_4_char_word() -> None:
-    AuthService.validate_credentials(RoleEnum.student, "cats", context="self_change")
-
-
 def test_student_self_change_rejects_3_chars() -> None:
     with pytest.raises(ValueError):
         AuthService.validate_credentials(RoleEnum.student, "cat", context="self_change")
@@ -1165,11 +1082,7 @@ Expected: the first FAILS (`"cats"` is not all digits); the second passes alread
 
 - [ ] **Step 2: Fix `validate_credentials` (`auth_service.py:41-43`)**
 
-```python
-        elif context == "self_change" and role == RoleEnum.student:
-            if len(password) < 4:
-                raise ValueError("Password must be at least 4 characters for students.")
-```
+Replace the `isdigit()` check in the `self_change` branch with a plain length check (the rule is "≥4 characters, any characters" — see Why *1). The fix is one `if len(password) < 4: raise ValueError(...)` branch — write it yourself; the message should say "at least 4 characters".
 
 - [ ] **Step 3: Failing tests for reset mapping + `first_login`**
 
@@ -1179,7 +1092,7 @@ Add the conftest helper import at the top of the file (module-level functions, n
 from app.tests.conftest import auth_headers, login, setup_admin
 ```
 
-Then shared helpers. Generated credentials are random, so **always read them from the create response — never guess**:
+Then two shared helpers — keep them exactly in spirit (they encode the two habits that make this suite reliable). Generated credentials are random, so **always read them from the create response — never guess**:
 
 ```python
 def _create_teacher(client, token: str, username: str) -> str:
@@ -1197,42 +1110,12 @@ def _account_id(client, token: str, username: str) -> int:
     return next(u["id"] for u in users if u["username"] == username)
 ```
 
-And the tests:
+And the tests — the shape of each is: setup admin → create victim/actor with the helpers → act → assert status:
 
-```python
-def test_reset_teacher_password_as_teacher_is_403(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    _create_teacher(client, admin_token, "reset-victim")
-    victim_id = _account_id(client, admin_token, "reset-victim")
-    teacher_password = _create_teacher(client, admin_token, "reset-actor")
-    teacher_token = login(client, "reset-actor", teacher_password)["access_token"]
-    response = client.post(
-        "/auth/reset-password",
-        json={"account_id": victim_id},
-        headers=auth_headers(teacher_token),
-    )
-    assert response.status_code == 403
+1. `test_reset_teacher_password_as_teacher_is_403` — teacher actor resets a teacher victim → `403` (today: **500** — the bug)
+2. `test_admin_reset_of_teacher_keeps_first_login_true` — admin resets a teacher, then login as the teacher and `GET /auth/me` → `first_login is True` (today: `False` — the bug)
 
-
-def test_admin_reset_of_teacher_keeps_first_login_true(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    _create_teacher(client, admin_token, "teacherC")
-    teacher_id = _account_id(client, admin_token, "teacherC")
-    response = client.post(
-        "/auth/reset-password",
-        json={"account_id": teacher_id},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 200
-    new_password = response.json()["new_password"]
-    me = client.get(
-        "/auth/me",
-        headers=auth_headers(login(client, "teacherC", new_password)["access_token"]),
-    )
-    assert me.json()["first_login"] is True
-```
+Write the `client.post("/auth/reset-password", json={"account_id": victim_id}, headers=auth_headers(token))` bodies yourself — the helper pattern above is the whole playbook.
 
 - [ ] **Step 4: Run — confirm both failures**
 
@@ -1280,102 +1163,34 @@ The self-change path in `AuthService.change_password` keeps the default `first_l
 
 - [ ] **Step 6: Failing tests for the `/setup` race and the `%` prefix**
 
-```python
-def test_setup_returns_403_when_admin_exists_but_flag_missing(client, setup_paths) -> None:
-    client.get("/setup")
-    (setup_paths / ".credentials_revealed").unlink()
-    (setup_paths / ".credentials").unlink()
-    response = client.get("/setup")
-    assert response.status_code == 403
-
-
-def test_bulk_prefix_with_percent_is_literal(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    response = client.post(
-        "/auth/users/bulk",
-        json={"count": 2, "role": "student", "prefix": "a%1"},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 201
-    assert [a["username"] for a in response.json()["accounts"]] == ["a%1001", "a%1002"]
-```
+1. `test_setup_returns_403_when_admin_exists_but_flag_missing` — `GET /setup` once, then **delete BOTH files** (`(setup_paths / ".credentials_revealed").unlink()` AND `(setup_paths / ".credentials").unlink()`), then `GET /setup` again → `403` (today: **500** — the uncaught `ValueError`)
+2. `test_bulk_prefix_with_percent_is_literal` — admin creates 2 students with `prefix="a%1"` via `/auth/users/bulk` → 201 with usernames exactly `["a%1001", "a%1002"]` (today: wrong — `%` acts as a LIKE wildcard)
 
 The race test deletes **both** files — that is what simulates a crash between the DB commit and the flag write. Deleting only the flag would take the `CREDENTIALS_FILE.exists()` branch and never reach the failing path.
 
 - [ ] **Step 7: Harden `/setup` (`setup_router.py:30-33`)**
 
-Wrap the creation so the authoritative operation's failure is handled instead of predicted:
-
-```python
-    if not CREDENTIALS_FILE.exists():
-        password = secrets.token_urlsafe(8)
-        credentials = {"username": "admin", "password": password}
-        try:
-            auth_service.setup_admin_account(credentials["password"])
-        except ValueError:
-            raise HTTPException(
-                status_code=403,
-                detail="admin credentials have already been revealed.",
-            )
-```
-
-403 is right: the admin exists, so the bootstrap is genuinely over — the caller just lost the one chance to see the password. Recovery is an out-of-band password reset, not a retry.
+Wrap the creation so the authoritative operation's failure is handled instead of predicted — the shape is `try: setup_admin_account(...) except ValueError: raise HTTPException(403)`. Write it yourself; the one decision to get right is the status code. 403 is right: the admin exists, so the bootstrap is genuinely over — the caller just lost the one chance to see the password. Recovery is an out-of-band password reset, not a retry.
 
 - [ ] **Step 8: Fix the prefix and delete dead code (`auth_repo.py`)**
 
-Line 51 — replace:
-
-```python
-                select(Account).where(Account.username.like(f"{prefix}%"))
-```
-
-with:
-
-```python
-                select(Account).where(Account.username.startswith(prefix))
-```
-
-Then delete `has_admin` (lines 33-39) entirely. If a future feature needs it, add it back **with tests**.
+Line 51 — one expression: replace the `LIKE`-with-format-string with the operator that expresses the intent: `Account.username.startswith(prefix)` (it auto-escapes `%`/`_`). Then delete `has_admin` (lines 33-39) entirely. If a future feature needs it, add it back **with tests**.
 
 - [ ] **Step 9: Handle `IntegrityError` on the create paths**
 
-`backend/app/repositories/auth_repo.py` — add `from sqlalchemy.exc import IntegrityError` at the top and make `create_account` fail cleanly:
-
-```python
-    def create_account(self, account: Account) -> Account:
-        self.db_session.add(account)
-        try:
-            self.db_session.commit()
-        except IntegrityError:
-            self.db_session.rollback()
-            raise
-        self.db_session.refresh(account)
-        return account
-```
+`backend/app/repositories/auth_repo.py` — add `from sqlalchemy.exc import IntegrityError` at the top and make `create_account` fail cleanly. The repo's contract: `add` → `try: commit()` → `except IntegrityError: rollback() + raise` → on success `refresh` + return. Write it yourself — the essential shape is rollback-then-re-raise, and the reason is in Why *5.
 
 The repo rolls back (restoring a usable session) and re-raises — **translating a database error into an HTTP status is the router's job, not the repository's.** Keeping `IntegrityError` here would leak persistence details into the domain; catching it silently would hide a real conflict.
 
-`backend/app/api/auth_router.py` — import `from sqlalchemy.exc import IntegrityError` and add to **both** `create_user` and `bulk_create_users`:
-
-```python
-    except IntegrityError:
-        raise HTTPException(status_code=400, detail="Username conflict - please retry.")
-```
+`backend/app/api/auth_router.py` — import `from sqlalchemy.exc import IntegrityError` and add `except IntegrityError: raise HTTPException(status_code=400, detail="Username conflict - please retry.")` to **both** `create_user` and `bulk_create_users` (two lines each — write them).
 
 - [ ] **Step 10: Fix the latent `get_all_users` crash (`auth_service.py:213-218`)**
 
-`accounts` is only assigned in the teacher and admin branches. Any other role reaches the return statement with the name unbound → `UnboundLocalError` → 500. The router's `RoleChecker` makes it unreachable *today*, but that is a guarantee held by a different file:
+`accounts` is only assigned in the teacher and admin branches. Any other role reaches the return statement with the name unbound → `UnboundLocalError` → 500. The router's `RoleChecker` makes it unreachable *today*, but that is a guarantee held by a different file. Fix: add the `else` branch — one line:
 
 ```python
-    def get_all_users(self, user_role: RoleEnum | None = None) -> list[AccountRead]:
-        if user_role == RoleEnum.teacher:
-            accounts = self.auth_repo.get_all_users(role=RoleEnum.student)
-        elif user_role == RoleEnum.admin:
-            accounts = self.auth_repo.get_all_users()
         else:
             raise PermissionError("Only teachers and admins can list users.")
-        return [AccountRead.model_validate(account) for account in accounts]
 ```
 
 **A function should be correct on its own terms, not because of who currently calls it.** An explicit raise turns a future refactor's silent 500 into a clear 403.
@@ -1417,357 +1232,75 @@ Two things worth internalizing from the shape of this suite:
 
 - [ ] **Step 1: Append the `AuthRepo` tests**
 
+Nine characterization tests against the repo directly (imports inside the test bodies: `from app.models import Account`, `from app.repositories import AuthRepo`). Each seeds via `AuthRepo(db).create_account(Account(...))` (see the construction idiom below) and asserts the repo's view of the world:
+
+1. `test_repo_get_by_username_found` / `2. ..._missing` — `get_by_username` returns the row / `None`
+3. `test_repo_get_by_id_found_and_missing` — known id vs `999_999`
+4. `test_repo_get_all_users_filters_by_role` — seed a student + a teacher; all-users `== {s1, t1}`, role-filtered `== {s1}`
+5. `test_repo_next_prefix_empty` — `get_next_prefix_number("stu") == 1`
+6. `test_repo_next_prefix_continues_from_max` — seed `stu001` + `stu005` → next == 6
+7. `test_repo_next_prefix_ignores_non_digit_suffix` — seed `stuabc` → next == 1
+8. `test_repo_change_password_first_login_default_false` / `9. ...can_keep_first_login` — pin the A2 keyword-only parameter in both directions (default `False`; explicit `first_login=True`)
+
+Construction idiom to mirror:
 ```python
-def test_repo_get_by_username_found(db) -> None:
-    from app.models import Account
-    from app.repositories import AuthRepo
-
-    AuthRepo(db).create_account(
-        Account(username="findme", hashed_password="x", role=RoleEnum.student,
-                first_name="A", last_name="B")
-    )
-    user = AuthRepo(db).get_by_username("findme")
-    assert user is not None and user.username == "findme"
-
-
-def test_repo_get_by_username_missing(db) -> None:
-    from app.repositories import AuthRepo
-
-    assert AuthRepo(db).get_by_username("ghost") is None
-
-
-def test_repo_get_by_id_found_and_missing(db) -> None:
-    from app.models import Account
-    from app.repositories import AuthRepo
-
-    created = AuthRepo(db).create_account(
-        Account(username="byid", hashed_password="x", role=RoleEnum.student,
-                first_name="A", last_name="B")
-    )
-    assert AuthRepo(db).get_by_id(created.id) is not None
-    assert AuthRepo(db).get_by_id(999_999) is None
-
-
-def test_repo_get_all_users_filters_by_role(db) -> None:
-    from app.models import Account
-    from app.repositories import AuthRepo
-
-    repo = AuthRepo(db)
-    repo.create_account(Account(username="s1", hashed_password="x", role=RoleEnum.student, first_name="A", last_name="B"))
-    repo.create_account(Account(username="t1", hashed_password="x", role=RoleEnum.teacher, first_name="A", last_name="B"))
-    assert {u.username for u in repo.get_all_users()} == {"s1", "t1"}
-    assert {u.username for u in repo.get_all_users(role=RoleEnum.student)} == {"s1"}
-
-
-def test_repo_next_prefix_empty(db) -> None:
-    from app.repositories import AuthRepo
-
-    assert AuthRepo(db).get_next_prefix_number("stu") == 1
-
-
-def test_repo_next_prefix_continues_from_max(db) -> None:
-    from app.models import Account
-    from app.repositories import AuthRepo
-
-    AuthRepo(db).create_account(Account(username="stu001", hashed_password="x", role=RoleEnum.student, first_name="A", last_name="B"))
-    AuthRepo(db).create_account(Account(username="stu005", hashed_password="x", role=RoleEnum.student, first_name="A", last_name="B"))
-    assert AuthRepo(db).get_next_prefix_number("stu") == 6
-
-
-def test_repo_next_prefix_ignores_non_digit_suffix(db) -> None:
-    from app.models import Account
-    from app.repositories import AuthRepo
-
-    AuthRepo(db).create_account(Account(username="stuabc", hashed_password="x", role=RoleEnum.student, first_name="A", last_name="B"))
-    assert AuthRepo(db).get_next_prefix_number("stu") == 1
-
-
-def test_repo_change_password_first_login_default_false(db) -> None:
-    from app.models import Account
-    from app.repositories import AuthRepo
-
-    repo = AuthRepo(db)
-    account = repo.create_account(
-        Account(username="cpw", hashed_password="old", role=RoleEnum.teacher,
-                first_name="A", last_name="B")
-    )
-    assert repo.change_password(account, "new").first_login is False
-
-
-def test_repo_change_password_can_keep_first_login(db) -> None:
-    from app.models import Account
-    from app.repositories import AuthRepo
-
-    repo = AuthRepo(db)
-    account = repo.create_account(
-        Account(username="cpw2", hashed_password="old", role=RoleEnum.teacher,
-                first_name="A", last_name="B")
-    )
-    assert repo.change_password(account, "new", first_login=True).first_login is True
+AuthRepo(db).create_account(
+    Account(username="findme", hashed_password="x", role=RoleEnum.student,
+            first_name="A", last_name="B")
+)
 ```
-
 The last two pin the A2 keyword-only parameter in both directions — the default and the override.
 
 - [ ] **Step 2: Append the HTTP integration tests**
 
-`auth_headers` / `login` / `setup_admin` and `_create_teacher` / `_account_id` were already added in A2 Step 3 — **do not redefine them.**
+`auth_headers` / `login` / `setup_admin` and `_create_teacher` / `_account_id` were already added in A2 Step 3 — **do not redefine them.** Every test here is the same choreography — setup admin, log in, act with headers — so once you have the first body, the rest are variations:
 
 ```python
-# --- /setup ---------------------------------------------------------------
-
-def test_setup_first_visit_generates_admin(client, setup_paths) -> None:
-    response = client.get("/setup")
-    assert response.status_code == 200
-    assert "admin" in response.json()["message"]
-    assert (setup_paths / ".credentials").exists()
-
-
-def test_setup_second_visit_returns_403(client, setup_paths) -> None:
-    client.get("/setup")
-    assert client.get("/setup").status_code == 403
-
-
-# --- /auth/token ----------------------------------------------------------
-
-def test_login_admin_success(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    body = login(client, "admin", admin_password)
-    assert body["role"] == "admin"
-    assert body["access_token"]
-
-
-def test_login_teacher_first_login_true(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    password = _create_teacher(client, admin_token, "login-tea")
-    assert login(client, "login-tea", password)["first_login"] is True
-
-
-def test_login_student_first_login_false(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    bulk = client.post(
-        "/auth/users/bulk",
-        json={"count": 1, "role": "student", "prefix": "stl"},
-        headers=auth_headers(admin_token),
-    )
-    credential = bulk.json()["accounts"][0]["password"]
-    assert login(client, "stl001", credential)["first_login"] is False
-
-
-def test_login_wrong_password_is_401(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    _create_teacher(client, admin_token, "wrong-pw")
-    response = client.post("/auth/token", json={"username": "wrong-pw", "password": "nope"})
-    assert response.status_code == 401
+admin_password = setup_admin(client, setup_paths)
+admin_token = login(client, "admin", admin_password)["access_token"]
+response = client.post("/auth/users/bulk", json={"count": 1, "role": "student", "prefix": "stl"}, headers=auth_headers(admin_token))
 ```
+
+# --- /setup ---
+- `test_setup_first_visit_generates_admin` — `GET /setup` → 200, message mentions "admin", `(setup_paths / ".credentials").exists()`
+- `test_setup_second_visit_returns_403` — second `GET /setup` → 403
+
+# --- /auth/token ---
+- `test_login_admin_success` — setup + login → `body["role"] == "admin"`, `body["access_token"]` non-empty
+- `test_login_teacher_first_login_true` — `_create_teacher` then login → `first_login is True`
+- `test_login_student_first_login_false` — bulk-create one student, read `credential` from the response, login → `first_login is False`
+- `test_login_wrong_password_is_401` — right username, `"nope"` password → 401
 
 `test_login_wrong_password_is_401` is the end-to-end proof of the A1 `verify_password` fix — before it, this returned 500.
 
-```python
-# --- /auth/me -------------------------------------------------------------
+# --- /auth/me ---
+- `test_me_returns_current_user` — GET /auth/me with headers → 200, `username == "admin"`
+- `test_me_without_token_rejected` — no headers → 401 or 403
 
-def test_me_returns_current_user(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    token = login(client, "admin", admin_password)["access_token"]
-    response = client.get("/auth/me", headers=auth_headers(token))
-    assert response.status_code == 200
-    assert response.json()["username"] == "admin"
+# --- /auth/users ---
+- `test_create_student_by_admin` — POST /auth/users (student json) with admin token → 201, credential length 6
+- `test_create_admin_by_admin_is_400` — role `"admin"` → 400 (A1's ValueError→400 mapping)
+- `test_create_teacher_by_teacher_is_403` — teacher token creating `"teacher"` → 403 (A1's PermissionError→403)
+- `test_create_duplicate_username_is_400` — create `"dup-user"` twice → 400
 
-
-def test_me_without_token_rejected(client) -> None:
-    assert client.get("/auth/me").status_code in (401, 403)
-
-
-# --- /auth/users ----------------------------------------------------------
-
-def test_create_student_by_admin(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    response = client.post(
-        "/auth/users",
-        json={"username": "stu1", "role": "student", "first_name": "S", "last_name": "U"},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 201
-    assert len(response.json()["credential"]) == 6
-
-
-def test_create_admin_by_admin_is_400(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    response = client.post(
-        "/auth/users",
-        json={"username": "boss", "role": "admin", "first_name": "A", "last_name": "B"},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 400
-
-
-def test_create_teacher_by_teacher_is_403(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    teacher_password = _create_teacher(client, admin_token, "tea-owner")
-    teacher_token = login(client, "tea-owner", teacher_password)["access_token"]
-    response = client.post(
-        "/auth/users",
-        json={"username": "tea2", "role": "teacher", "first_name": "A", "last_name": "B"},
-        headers=auth_headers(teacher_token),
-    )
-    assert response.status_code == 403
-
-
-def test_create_duplicate_username_is_400(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    _create_teacher(client, admin_token, "dup-user")
-    response = client.post(
-        "/auth/users",
-        json={"username": "dup-user", "role": "student", "first_name": "D", "last_name": "U"},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 400
-
-
-# --- /auth/users/bulk -----------------------------------------------------
-
-def test_bulk_create_students_by_admin(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    response = client.post(
-        "/auth/users/bulk",
-        json={"count": 3, "role": "student", "prefix": "bu"},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 201
-    assert [a["username"] for a in response.json()["accounts"]] == ["bu001", "bu002", "bu003"]
-
-
-def test_bulk_create_teacher_by_teacher_is_403(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    teacher_password = _create_teacher(client, admin_token, "b-tea")
-    teacher_token = login(client, "b-tea", teacher_password)["access_token"]
-    response = client.post(
-        "/auth/users/bulk",
-        json={"count": 1, "role": "teacher", "prefix": "tb"},
-        headers=auth_headers(teacher_token),
-    )
-    assert response.status_code == 403
-
-
-def test_bulk_create_admin_is_400(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    response = client.post(
-        "/auth/users/bulk",
-        json={"count": 1, "role": "admin", "prefix": "ab"},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 400
-```
+# --- /auth/users/bulk ---
+- `test_bulk_create_students_by_admin` — count 3, prefix `"bu"` → 201, usernames exactly `["bu001", "bu002", "bu003"]`
+- `test_bulk_create_teacher_by_teacher_is_403` — teacher token, role teacher → 403
+- `test_bulk_create_admin_is_400` — role admin → 400
 
 `test_bulk_create_admin_is_400` pins the A1 Step 9 consistency fix — it returned 403 before.
 
-```python
-# --- /auth/change-password -------------------------------------------------
+# --- /auth/change-password ---
+- `test_student_changes_own_password_then_relogin` — bulk-create a student, login with the returned credential, change to `"newpwd4"` → 200, then re-login works with the new password
+- `test_change_password_wrong_old_password_is_400` — same setup, `old_password="totally-wrong"` → 400
+- `test_change_password_sets_first_login_false` — change password, re-login, `GET /auth/me` → `first_login is False`
 
-def test_student_changes_own_password_then_relogin(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    bulk = client.post(
-        "/auth/users/bulk",
-        json={"count": 1, "role": "student", "prefix": "cp"},
-        headers=auth_headers(admin_token),
-    ).json()
-    old_password = bulk["accounts"][0]["password"]
-    token = login(client, "cp001", old_password)["access_token"]
-    response = client.post(
-        "/auth/change-password",
-        json={"old_password": old_password, "new_password": "newpwd4"},
-        headers=auth_headers(token),
-    )
-    assert response.status_code == 200
-    assert login(client, "cp001", "newpwd4")["access_token"]
-
-
-def test_change_password_wrong_old_password_is_400(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    bulk = client.post(
-        "/auth/users/bulk",
-        json={"count": 1, "role": "student", "prefix": "wo"},
-        headers=auth_headers(admin_token),
-    ).json()
-    old_password = bulk["accounts"][0]["password"]
-    token = login(client, "wo001", old_password)["access_token"]
-    response = client.post(
-        "/auth/change-password",
-        json={"old_password": "totally-wrong", "new_password": "newpwd4"},
-        headers=auth_headers(token),
-    )
-    assert response.status_code == 400
-
-
-def test_change_password_sets_first_login_false(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    bulk = client.post(
-        "/auth/users/bulk",
-        json={"count": 1, "role": "student", "prefix": "fl"},
-        headers=auth_headers(admin_token),
-    ).json()
-    old_password = bulk["accounts"][0]["password"]
-    token = login(client, "fl001", old_password)["access_token"]
-    client.post(
-        "/auth/change-password",
-        json={"old_password": old_password, "new_password": "newpwd4"},
-        headers=auth_headers(token),
-    )
-    me = client.get(
-        "/auth/me",
-        headers=auth_headers(login(client, "fl001", "newpwd4")["access_token"]),
-    )
-    assert me.json()["first_login"] is False
-
-
-# --- /auth/reset-password -------------------------------------------------
-
-def test_teacher_resets_student(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    client.post(
-        "/auth/users/bulk",
-        json={"count": 1, "role": "student", "prefix": "rs"},
-        headers=auth_headers(admin_token),
-    )
-    student_id = _account_id(client, admin_token, "rs001")
-    teacher_password = _create_teacher(client, admin_token, "reset-tea")
-    teacher_token = login(client, "reset-tea", teacher_password)["access_token"]
-    response = client.post(
-        "/auth/reset-password",
-        json={"account_id": student_id},
-        headers=auth_headers(teacher_token),
-    )
-    assert response.status_code == 200
-    assert login(client, "rs001", response.json()["new_password"])
-
-
-def test_reset_missing_account_is_404(client, setup_paths) -> None:
-    admin_password = setup_admin(client, setup_paths)
-    admin_token = login(client, "admin", admin_password)["access_token"]
-    response = client.post(
-        "/auth/reset-password",
-        json={"account_id": 999999},
-        headers=auth_headers(admin_token),
-    )
-    assert response.status_code == 404
-
+# --- /auth/reset-password ---
+- `test_teacher_resets_student` — admin bulk-creates `rs001`, teacher resets it → 200, login works with `response.json()["new_password"]`
+- `test_reset_missing_account_is_404` — `account_id: 999999` → 404
 
 # NOTE: test_reset_teacher_password_as_teacher_is_403 and
 # test_admin_reset_of_teacher_keeps_first_login_true are defined in A2 Step 3.
-```
 
 `test_change_password_wrong_old_password_is_400` covers the *second* `verify_password` call site — `auth_router.py:74`, outside any `try` — which returned 500 before A1.
 
