@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python, FastAPI, Docker
 
+**Status (2026-08-24):** Task 1 and Task 3 are complete — verified against the tree and git history (`db48836`, `e81a7ed`). Task 2's root-files cleanup also landed (`939fdad`), but the `frontend/` directory it created was empty, so git never tracked it and it no longer exists on checkout. The actual frontend landing is still pending the stack decision this semester (see the 2026-08-25 team-config design session) — it will create `frontend/` with real content or a `.gitkeep`.
+
 ---
 
 ### Task 1: Create `backend/` directory and move backend files
@@ -15,12 +17,11 @@
 **Files:**
 - Create: `backend/`
 - Move: `app/` → `backend/app/`
-- Move: `requirements.txt` → `backend/requirements.txt`
 - Move: `pyproject.toml` → `backend/pyproject.toml`
-- Move: `.python-version` → `backend/.python-version`
 - Move: `Dockerfile` → `backend/Dockerfile`
+- Note (accounted): `requirements.txt` moved here originally, then deliberately deleted by hygiene S2 (`547d18b`) — `backend/pyproject.toml` + `uv.lock` are now the single manifest. `.python-version` no longer exists anywhere; the toolchain pins `requires-python` in `pyproject.toml`.
 
-- [ ] **Step 1: Create backend directory and move files**
+- [x] **Step 1: Create backend directory and move files**
 
 ```bash
 mkdir backend
@@ -31,19 +32,16 @@ mv .python-version backend/
 mv Dockerfile backend/
 ```
 
-- [ ] **Step 2: Verify the move**
+- [x] **Step 2: Verify the move**
 
 ```bash
 ls backend/
 ```
-Expected: `app/`, `requirements.txt`, `pyproject.toml`, `.python-version`, `Dockerfile`
+Expected (2026-08-24 tree): `app/`, `pyproject.toml`, `uv.lock`, `Dockerfile` + later additions (`alembic.ini`, `migrations/`, `conftest.py`, `data/`, `uploads/`)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
-```bash
-git add -A
-git commit -m "refactor: move backend code into backend/ directory"
-```
+Landed as `db48836` — "refactor: move backend code into backend/ directory".
 
 ### Task 2: Create frontend directory and clean up root
 
@@ -52,33 +50,31 @@ git commit -m "refactor: move backend code into backend/ directory"
 - Delete: `package.json`
 - Delete: `package-lock.json`
 
-- [ ] **Step 1: Create frontend directory and remove orphaned root files**
+- [x] **Step 1: Create frontend directory and remove orphaned root files**
 
-```bash
-mkdir frontend
-rm package.json package-lock.json
-```
+Executed and landed as `939fdad`. The `rm` half is permanent — no `package.json` / `package-lock.json` at root (verified 2026-08-24). The `mkdir frontend` half did not stick: git does not track empty directories, so after that commit the directory only exists on machines that still have the working tree from the day.
 
-- [ ] **Step 2: Verify cleanup**
+- [x] **Step 2: Verify cleanup**
 
 ```bash
 ls -la
 ```
-Expected: `backend/`, `frontend/`, `docker-compose.yml`, `.gitignore`, etc. No `package.json` or `package-lock.json` at root.
+Expected (2026-08-24 tree): `backend/`, `docs/`, `docker/`, `docker-compose.yml`, `.dockerignore`, `.gitattributes`, `.opencode/`, `AGENTS.md`, `README.md`, `STATE.md`, `.graphifyignore`. No root `package.json` / `package-lock.json`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
-```bash
-git add -A
-git commit -m "refactor: create empty frontend/ directory, remove orphaned root package files"
-```
+Landed as `939fdad` — "refactor: create empty frontend/ directory, remove orphaned root package files".
+
+- [ ] **Step 4: Land the frontend directory for real (pending — this semester)**
+
+Stack decision drives this. Create `frontend/` with real content or a `.gitkeep` so git tracks it; CI gains the frontend gate slot per the frontend-ready CI design (2026-08-25 team-config session); the `2026-05-26-monorepo-restructure` plan then reads fully complete or is superseded by the frontend plan.
 
 ### Task 3: Update docker-compose.yml to point to backend/Dockerfile
 
 **Files:**
 - Modify: `docker-compose.yml`
 
-- [ ] **Step 1: Update Dockerfile path**
+- [x] **Step 1: Update Dockerfile path**
 
 In `docker-compose.yml`, change:
 ```yaml
@@ -89,16 +85,13 @@ to:
       dockerfile: backend/Dockerfile
 ```
 
-- [ ] **Step 2: Verify the change**
+- [x] **Step 2: Verify the change**
 
 ```bash
 grep dockerfile docker-compose.yml
 ```
-Expected: `dockerfile: backend/Dockerfile`
+Expected: `dockerfile: backend/Dockerfile` (verified 2026-08-24)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
-```bash
-git add docker-compose.yml
-git commit -m "refactor: update docker-compose to use backend/Dockerfile"
-```
+Landed as `e81a7ed` — "refactor: update docker-compose to use backend/Dockerfile".
