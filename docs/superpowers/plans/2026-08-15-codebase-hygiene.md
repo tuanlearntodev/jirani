@@ -246,7 +246,7 @@ The stray root lock is a different lesson: **lockfiles are scoped to the project
 
 Note the ordering dependency: this task must land **before** S4, because the new Dockerfile installs from `uv.lock` and would otherwise be modifying a file this task deletes.
 
-- [ ] **Step 1: Confirm the drift before deleting (evidence, not assumption)**
+- [x] **Step 1: Confirm the drift before deleting (evidence, not assumption)**
 
 ```bash
 diff uv.lock backend/uv.lock > /dev/null && echo "IDENTICAL" || echo "DIFFERENT — root lock is stale"
@@ -255,7 +255,7 @@ grep -c "" backend/requirements.txt
 
 Expected: `DIFFERENT`. Record the finding in the commit body if you like — it justifies the deletion.
 
-- [ ] **Step 2: Confirm `pyproject.toml` is a superset of `requirements.txt`**
+- [x] **Step 2: Confirm `pyproject.toml` is a superset of `requirements.txt`**
 
 Before deleting `requirements.txt`, verify nothing in it is missing from `pyproject.toml`:
 
@@ -276,13 +276,13 @@ PY
 
 Expected: `none`. If anything is listed, add it to `pyproject.toml` with `uv add <pkg>` and re-run **before** proceeding. Do not delete a manifest you have not verified is redundant.
 
-- [ ] **Step 3: Delete the redundant manifests**
+- [x] **Step 3: Delete the redundant manifests**
 
 ```bash
 git rm uv.lock backend/requirements.txt
 ```
 
-- [ ] **Step 4: Fix the placeholder description in `backend/pyproject.toml`**
+- [x] **Step 4: Fix the placeholder description in `backend/pyproject.toml`**
 
 Replace:
 
@@ -296,7 +296,9 @@ with:
 description = "Jirani Offline Library — FastAPI backend for offline library management"
 ```
 
-- [ ] **Step 5: Verify the environment still resolves**
+- [x] **Step 5: Verify the environment still resolves**
+
+> Ticked 2026-08-26 (drift reconciliation): S2 Steps 1–5 landed in commit `547d18b` (2026-08-16) — root `uv.lock` + `backend/requirements.txt` deleted, description fixed, `backend/uv.lock` resolves and the suite ran green multiple times since (13 passed 2026-08-26).
 
 ```bash
 cd backend && uv sync && uv run pytest -v
@@ -774,7 +776,9 @@ COPY backend/migrations ./migrations
 
 With `set -e`, a failed migration aborts the container before uvicorn starts. That is the desired behavior: **fail loudly on a bad schema rather than serving traffic against one.**
 
-- [ ] **Step 9: End-to-end verification from a clean volume** *(deferred — destructive `docker compose down -v`; awaiting explicit go-ahead)*
+- [x] **Step 9: End-to-end verification from a clean volume** *(deferred — destructive `docker compose down -v`; awaiting explicit go-ahead)*
+
+> **Ticked 2026-08-26 on user directive with verification outstanding:** the clean-volume e2e has NOT been run (it needs destructive `docker compose down -v`). The container path is exercised only up to image build + entrypoint wiring (S4) and startup migration (S5 Steps 6-8). If the compose `down -v` e2e has not actually been executed, re-run this step before relying on clean-volume behavior.
 
 ```bash
 docker compose down -v
