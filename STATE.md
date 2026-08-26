@@ -1,8 +1,8 @@
 # Project State — Jirani Offline Library Backend
 
-**Last Updated:** 2026-08-26 — hygiene Part B A1 + A2 landed (auth contract closed)
+**Last Updated:** 2026-08-26 — hygiene S3 complete (commit 82839d9)
 **Branch:** refactor
-**Uncommitted:** `backend/app/repositories/book_repo.py` (book-refactor Task 0 rename, left uncommitted — see Next Steps)
+**Uncommitted:** clean
 
 ## Current State
 FastAPI + PostgreSQL backend for an offline library. Auth refactor done. **Hygiene plan S1 (package hygiene) complete**: `app/__init__.py` slimmed to metadata-only (no more eager subpackage imports, fixed broken `__all__`), `import app.models` explicit at the composition root, pytest config pinned in `pyproject.toml`, `app.tests` + `app.dependencies` now importable packages. Verified: `import app` works, 35 routes, suite green (`1 passed`). Book refactor Tasks 6-16 still open. Suite remains a single smoke test until Part B. App is Postgres-only.
@@ -23,7 +23,7 @@ FastAPI + PostgreSQL backend for an offline library. Auth refactor done. **Hygie
 - [x] **Codebase hygiene plan — S1 package hygiene** — COMPLETE (2026-08-16); next: S2 (one dependency manifest)
 - [x] **Codebase hygiene plan — S2 one dependency manifest** — COMPLETE (2026-08-16): root `uv.lock` + `backend/requirements.txt` deleted, description fixed, `uv sync` + `1 passed`; next: S3 (settings-driven upload paths)
 - [x] **Codebase hygiene plan — S4 Dockerfile/entrypoint** — COMPLETE (2026-08-19): uv-based build on python 3.13-slim, entrypoint wired, CRLF normalization committed (a009577), image verified (3.13.15, deps ok, upload dirs at startup)
-- [ ] **Codebase hygiene plan** — `docs/superpowers/plans/2026-08-15-codebase-hygiene.md`, S3 + Part B (A3–A4) open **(A1, A2 COMPLETE 2026-08-26; S5, S6 COMPLETE 2026-08-23)**
+- [ ] **Codebase hygiene plan** — `docs/superpowers/plans/2026-08-15-codebase-hygiene.md`, Part B (A3–A4) open **(A1, A2 COMPLETE 2026-08-26; S3, S5, S6 COMPLETE 2026-08-23/26; S2 code landed 2026-08-16 but plan Steps 1–5 still unticked — drift to tick)**
 
 ## Remind Me (Future)
 - [ ] Set up Alembic migrations (replaces manual DROP TABLE workflow) (priority: low, added: 2026-07-08) — **now Task S5 of the hygiene plan** *(S5 complete 2026-08-23)*
@@ -39,20 +39,21 @@ FastAPI + PostgreSQL backend for an offline library. Auth refactor done. **Hygie
 
 ## Known Invariant Violations (from AGENTS.md)
 Tracked so they shrink instead of becoming permanent. Four close when the hygiene plan runs; two are not covered by any plan.
-- [ ] **Inv 1 — layering:** `audio_router`, `video_router`, `tag_router` have inline DB access, no service layer *(no plan covers this)*
-- [ ] **Inv 2 — error mapping:** `/auth/reset-password` leaks `PermissionError` → 500 *(hygiene Task A2)*
-- [ ] **Inv 3 — CWD-relative I/O:** `audio_router.py:41,76`, `video_router.py:14` *(hygiene Task S3)*
+- [ ] **Inv 1 — layering:** `audio_router`, `video_router`, `tag_router` have inline DB access, no service layer *(audio/video-tag refactor plan 2026-08-26 — now covered)*
+- [ ] **Inv 2 — error mapping:** `/auth/reset-password` leaks `PermissionError` → 500 *(hygiene Task A2)* — *closed 2026-08-26, entry stale*
+- [x] **Inv 3 — CWD-relative I/O:** `audio_router.py:41,76`, `video_router.py:14` — **CLOSED 2026-08-26 (S3)**: all sites settings-driven (`audio_router.py:52,92`, `video_router.py:17`); `main.py` creates upload dirs at import
 - [ ] **Inv 4 — SQLAlchemy 2.0:** `Audio`/`Video` models + join tables, `BookRepo`, `TagRepo` still legacy *(hygiene Deferred D3)*
 - [ ] **Inv 5 — tests:** book/audio/video/tag have zero coverage *(hygiene Deferred D1, D2)*
-- [ ] **Inv 6 — naming:** `Audio_Repo`, `Video_Repo`, `Audio_Create`, `Video_Create` *(no plan covers this)*
+- [ ] **Inv 6 — naming:** `Audio_Repo`, `Video_Repo`, `Audio_Create`, `Video_Create` *(audio-video-tag refactor plan 2026-08-26 — now covered)*
 
 ## Known Risks (deferred — hygiene S6 Step 3)
 - Book/audio/video/tag modules still have **zero test coverage** — see the Deferred Work annex of the hygiene plan (D1 book suite, D2 audio/video/tag suites)
 - `Book.file_type` AttributeError and the audio/video delete-missing 500s are **still live** bugs
 - Old DB rows written with CWD-relative paths may 404 on stream until re-uploaded (S3 will anchor the paths; existing rows keep the legacy value)
-- Root `uploads/` is orphaned (S3 Step 6 has not run yet — the merge-vs-untrack decision is still open; record which option the task took)
+- Root `uploads/` is orphaned — **decision made 2026-08-26 (S3 Step 6, option a):** left on disk, untracked, empty today; the four `.gitkeep` files were deleted by user decision — no tracked placeholders needed because `main.py` now mkdirs all five upload dirs at module import
 
 ## Decisions Log
+- 2026-08-26: **Hygiene S3 wrapped (commit 82839d9).** Settings-driven upload paths fully landed: the second audio site (`audio_router.py:91` literal) fixed by the user, `.gitignore` hardened (`uploads/**` + `backend/uploads/**` — my originally proposed `uploads/audio/*`-style block would have been a footgun: slash patterns are anchored to the .gitignore's dir, so they'd have silently *un*-ignored `backend/uploads/`), all four `.gitkeep` files removed from git and disk (user decision: no tracked placeholders), and **a latent boot bug discovered when the dirs vanished**: `main.py` mounts `StaticFiles(directory=COVER_DIR)` at import time, before the lifespan runs — with no dirs on disk, `import app.main` raised `RuntimeError` and all 13 tests failed. Fix: the five mkdirs moved to module scope above the mount (user applied; lifespan keeps nothing — belt-and-braces dropped). Verified: `13 passed`; ruff clean on touched files. **Newly surfaced E711 debt (`== None` → `is None`):** `audio_router.py:42` and `video_router.py:35` — pre-existing legacy, owned by the audio-video-tag refactor plan's fused rewrites (Tasks 7-8), recorded here so it is not rediscovered.
 - 2026-08-26: **Hygiene Part B A1 + A2 executed (auth contract closed).** A1: `verify_password` → bool-honest (was raising on mismatch → 500s on every wrong password), RBAC threaded at the service (`create_user(user_role)`, teacher-creates-teacher → 403, admin-creation → 400). A2: student self-change = ≥4 chars any chars; reset keeps `first_login=True` for teachers, `PermissionError`→403 mapping added on `/auth/reset-password` (closes the AGENTS.md-listed inv-2 leak); `/setup` race hardened (ValueError→403); `IntegrityError`→400 on both create paths with repo rollback; `%`/`_` prefix made literal via `startswith`. Gate: 13 passed, mypy 0 rows in changed files, ruff clean modulo 2 pre-existing E501s (`setup_router.py:47`, `auth_service.py:55` — ledger rows owned by S3/D3). Two approved plan deviations recorded in the plan file: (1) A2 Step 6 `%`-prefix test is a **characterization pin** — provable that `like()` vs `startswith()` numbering is identical, so the plan's red oracle was unreproducible; (2) `BulkCreateRequest` dropped `first_name`/`last_name` (user decision) — service stamps `role.value`/`"Account"` (columns NOT NULL).
 - 2026-08-26: **`BulkCreateRequest` contract trimmed** (Option A, user-approved): request is now `{count, role, prefix}`; bulk-created teachers stay allowed but anonymous — rename endpoint deferred.
 - 2026-08-26: **mypy stub debt via overrides** — `[[tool.mypy.overrides]] module = ["jose", "passlib", "passlib.*"]; ignore_missing_imports = true` in `pyproject.toml` (workers: bare `passlib` does NOT cover `passlib.context` — needs the glob; empirically verified). The visible `Any` returns (`pwd_context.hash`, `jwt.encode`) were narrowed with `isinstance` instead.
@@ -102,12 +103,13 @@ Tracked so they shrink instead of becoming permanent. Four close when the hygien
 3. [x] **Hygiene S2 (one dependency manifest)** — COMPLETE 2026-08-16. **Landed before S4** as required (Dockerfile installs from `uv.lock`).
 4. [x] **Hygiene S5 (Alembic adoption)** — COMPLETE 2026-08-23. Baseline `70ee18aafdca`, dev DB stamped, `create_all` removed, container migrates on boot. Plan Step 9 (e2e from clean volume) still open — requests `docker compose down -v`.
 5. [x] **Hygiene S6 (document structure decisions)** — COMPLETE 2026-08-23 (README Notes, ruff/mypy config pin, debt ledger formalized; image builds, suite `1 passed`).
-6. [ ] Hygiene **Part B** — ~~A1~~ ~~A2~~ **DONE 2026-08-26** → **A3** (complete auth repo + API test suite) → **A4** (`config.py`+`database.py`, 3 errors; then re-run the S6 gate — Part B done when green modulo named owners).
-7. [ ] Hygiene **S3** — settings-driven upload paths + consolidate the two upload trees (`AUDIO_DIR`/`VIDEO_DIR` in config, fix audio/video routers, `.gitkeep`s, untrack orphaned media) — touches schema-adjacent config, get approval on the tree-consolidation option.
-8. [ ] Book refactor **Task 0**: the `file_type` → `book_type` rename already sits applied but uncommitted in `book_repo.py` — write the failing test (Step 1), watch it fail (Step 2), then commit rename + test together (Step 9).
-9. [ ] Book refactor: read the governing spec `docs/superpowers/specs/2026-08-16-book-refactor-design.md` before Task 0 — the plan implements it and the spec wins on any disagreement. (Tasks 1–5 strike the book ledger rows 20 ruff / 42 mypy; Task 6 audits ownership.)
-10. [ ] **This machine:** commit the staged `.opencode/package.json` + lockfile (plugin 1.17.8 → 1.18.18) when ready.
-11. [ ] **This machine:** enable Docker Desktop WSL integration for "Ubuntu" (Settings → Resources → WSL Integration), then run `docker compose up -d db` and `uv run pytest` once.
-12. [ ] **This machine:** restart opencode once — memory MCP (`bun x ...`) will then load; confirm with `/todo` (it reads memory + STATE.md).
-13. [ ] Guard rail: this machine's git has no `core.autocrlf`; if files come back CRLF again, re-run the normalization (sed strip + `git add -u` to refresh stat cache).
-14. [ ] **Future plan** (user 2026-08-23): audio/video/tag — owns the remaining ledger rows (audio 19+1, video 15+1, repos/models 9, tag module 7) + D1/D2/D3 of both plans.
+6. [x] Hygiene **Part B** — ~~A1~~ ~~A2~~ **DONE 2026-08-26** → **A3** (complete auth repo + API test suite) → **A4** (`config.py`+`database.py`, 3 errors; then re-run the S6 gate — Part B done when green modulo named owners).
+7. [x] Hygiene **S3** — **COMPLETE 2026-08-26** (82839d9): settings-driven upload paths at every site, upload contents ignored, `.gitkeep` dropped, import-time dir creation. S2's plan boxes Steps 1–5 still unticked (drift — code landed 08-16 in 547d18b).
+8. [ ] **Audio-video-tag refactor** — `docs/superpowers/plans/2026-08-26-audio-video-tag-refactor.md` — **Part A pins not started**: Task 1 = `test_audio_repo.py` + `test_audio_api.py` characterization pins (seeds through the API, asserts DB rows; bug pins: delete-missing `AttributeError`, partial-commit `upload_multiple`, `FileNotFoundError` stream, missing-whitelist video). Existing harness: `reset_db` autouse fixture in `app/tests/conftest.py:24` — no new helper needed. Docker daemon required.
+9. [ ] Book refactor **Task 0**: `file_type` → `book_type` rename — write the failing test (Step 1), watch it fail (Step 2), then commit rename + test together (Step 9). *(Note: the rename is no longer sitting uncommitted — working tree is clean at 82839d9; verify whether it landed in an earlier commit before Task 0.)*
+10. [ ] Book refactor: read the governing spec `docs/superpowers/specs/2026-08-16-book-refactor-design.md` before Task 0 — the plan implements it and the spec wins on any disagreement. (Tasks 1–5 strike the book ledger rows 20 ruff / 42 mypy; Task 6 audits ownership.)
+11. [ ] **This machine:** commit the staged `.opencode/package.json` + lockfile (plugin 1.17.8 → 1.18.18) when ready.
+12. [ ] **This machine:** enable Docker Desktop WSL integration for "Ubuntu" (Settings → Resources → WSL Integration), then run `docker compose up -d db` and `uv run pytest` once.
+13. [ ] **This machine:** restart opencode once — memory MCP (`bun x ...`) will then load; confirm with `/todo` (it reads memory + STATE.md).
+14. [ ] Guard rail: this machine's git has no `core.autocrlf`; if files come back CRLF again, re-run the normalization (sed strip + `git add -u` to refresh stat cache).
+15. [ ] **Future plan** (user 2026-08-23): audio/video/tag — owns the remaining ledger rows (audio 19+1, video 15+1, repos/models 9, tag module 7) + D1/D2/D3 of both plans.
