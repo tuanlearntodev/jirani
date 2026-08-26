@@ -15,6 +15,7 @@ from app.schemas.audio_schema import Audio_Create, Audio_View
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 ALLOWED_AUDIO = {"mp3", "mp4", "wav", "ogg", "m4a", "aac", "flac"}
+AUDIO_DIR = settings.AUDIO_DIR
 
 
 def validate_audio(filename: str):
@@ -88,7 +89,7 @@ async def upload_audio(
 async def upload_multiple(
     files: list[UploadFile] = File(...), db: Session = Depends(get_db)
 ):
-    upload_directory = "uploads/audio"
+    upload_directory = AUDIO_DIR
     os.makedirs(upload_directory, exist_ok=True)
     repo = Audio_Repo(db)
     results = []

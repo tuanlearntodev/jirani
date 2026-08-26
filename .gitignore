@@ -15,7 +15,8 @@ ENV/
 Thumbs.db
 
 # Project specific
-uploads/
+uploads/**
+backend/uploads/**
 *.log
 
 # Generated briefings

@@ -21,11 +21,7 @@ from app.database import engine
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
-    settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    settings.COVER_DIR.mkdir(parents=True, exist_ok=True)
-    settings.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    settings.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
     yield
     # Shutdown (if needed)
     engine.dispose()
@@ -45,6 +41,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings.COVER_DIR.mkdir(parents=True, exist_ok=True)
+settings.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+settings.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 # Mount covers directory for public access (books require auth)
 
 app.mount(

@@ -332,7 +332,7 @@ Expected: sync succeeds against `backend/uv.lock`; tests still `1 passed`.
 
 *Directory creation belongs at the composition root.* Today each router calls `os.makedirs` inline at request time. Moving it to the lifespan means the "does this directory exist" question is answered once at startup, not on every upload — and a permissions failure surfaces at boot instead of on a user's first upload.
 
-- [ ] **Step 1: Add the two missing directory settings to `backend/app/config.py`**
+- [x] **Step 1: Add the two missing directory settings to `backend/app/config.py`**
 
 In the `Settings` class, alongside the existing `UPLOAD_DIR` / `COVER_DIR`:
 
@@ -346,7 +346,7 @@ In the `Settings` class, alongside the existing `UPLOAD_DIR` / `COVER_DIR`:
 
 `vids` (not `videos`) is deliberate — it matches the existing on-disk directory and the Dockerfile's `mkdir`. Renaming it is a separate migration with data implications; do not fold it in here.
 
-- [ ] **Step 2: Fix `backend/app/api/audio_router.py` — BOTH sites**
+- [x] **Step 2: Fix `backend/app/api/audio_router.py` — BOTH sites**
 
 Add to the imports:
 
@@ -362,7 +362,7 @@ Then replace the assignment at **line 41** and again at **line 76** (single-file
 
 Leave the surrounding `os.makedirs(upload_directory, exist_ok=True)` and the `file_location` f-string as they are. `Path` interpolates cleanly into an f-string, so `f"{upload_directory}/{uuid...}"` still produces a valid absolute path. This is intentionally the minimum diff — no behavior change beyond the anchor point.
 
-- [ ] **Step 3: Fix `backend/app/api/video_router.py` — line 14**
+- [x] **Step 3: Fix `backend/app/api/video_router.py` — line 14**
 
 Add `from app.config import settings` to the imports, then replace:
 
@@ -384,7 +384,7 @@ cd backend && uv run ruff check app/api/video_router.py --ignore B008
 
 Remove the import only if ruff reports `F401`.
 
-- [ ] **Step 4: Create all four upload dirs in the `backend/app/main.py` lifespan**
+- [x] **Step 4: Create all four upload dirs in the `backend/app/main.py` lifespan**
 
 The lifespan currently creates only `UPLOAD_DIR`, `COVER_DIR`, and `DATA_DIR`. Add the two new ones:
 
@@ -398,7 +398,7 @@ The lifespan currently creates only `UPLOAD_DIR`, `COVER_DIR`, and `DATA_DIR`. A
 
 (Keep `Base.metadata.create_all` for now — Task S5 removes it.)
 
-- [ ] **Step 5: Untrack the orphaned media**
+- [x] **Step 5: Untrack the orphaned media**
 
 ```bash
 git rm --cached uploads/audio/*.mp3 uploads/audio/*.wav
@@ -412,7 +412,9 @@ git ls-files | grep -E "\.(mp3|wav|mp4)$" || echo "clean"
 
 Expected: `clean`.
 
-- [ ] **Step 6: Decide the fate of the orphaned root tree**
+- [x] **Step 6: Decide the fate of the orphaned root tree**
+
+> **Decision recorded 2026-08-26:** option (a) — leave the root tree on disk, untracked (it is empty today; the `.gitignore` covers it). **Deviation from plan text:** no `.gitkeep` files were added. User decision: the dirs are not load-bearing in git because `main.py` now creates all five upload dirs at **module import time** (before the `StaticFiles` covers mount, which was failing at import when the dirs were absent — this failure mode is exactly why the plan's "add .gitkeep" instruction existed). The `git rm` of the four `.gitkeep` files happened in the S3 wrap-up commit.
 
 Root `uploads/` is not read by the application. Two defensible options — pick one and record it in STATE.md:
 
@@ -435,7 +437,7 @@ git add -f backend/uploads/*/.gitkeep
 
 `-f` is required because `.gitignore` has a bare `uploads/` rule that matches at any depth.
 
-- [ ] **Step 7: Verify**
+- [x] **Step 7: Verify**
 
 ```bash
 cd backend && uv run python -c "from app.config import settings; print(settings.AUDIO_DIR); print(settings.VIDEO_DIR)"
@@ -444,7 +446,9 @@ cd backend && uv run pytest -v
 
 Expected: both paths print as absolute, rooted at `backend/uploads/`; tests still pass.
 
-- [ ] **Step 8: Lint + commit (two commits — config change and media untracking are separate concerns)**
+- [x] **Step 8: Lint + commit (two commits — config change and media untracking are separate concerns)**
+
+> Commit 1 (`fix: anchor upload paths to settings instead of the working directory`) landed 2026-08-19 as `1bc3d62` — config, both routers' settings-sites, lifespan mkdirs. Commit 2 landed in the 2026-08-26 wrap-up (`chore: drop .gitkeep, ignore upload contents, create upload dirs at import`) — `.gitignore` hardening (`uploads/**` + `backend/uploads/**`), the second audio site fix (`audio_router.py:91`), `.gitkeep` removal ×4, and the `main.py` import-time mkdir move. Pre-existing lint debt noted during verification: `E711` (`== None`) at `audio_router.py:42` and `video_router.py:35` — legacy, out of scope, logged in STATE.md, and slated for deletion by the audio/video/tag refactor plan anyway.
 
 ```bash
 cd backend && uv run ruff format app/config.py app/main.py app/api/audio_router.py app/api/video_router.py && uv run ruff check app/config.py app/main.py app/api/audio_router.py app/api/video_router.py --ignore B008
