@@ -60,7 +60,7 @@ class AuthService:
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         if pwd_context.verify(plain_password, hashed_password):
             return True
-        raise ValueError("Invalid password format.")
+        return False
 
     @staticmethod
     def get_password_hash(password: str) -> str:
@@ -77,18 +77,22 @@ class AuthService:
             return None
         return account
 
-    def create_user(self, metadata: AccountCreateRequest) -> tuple[Account, str]:
+    def create_user(
+        self, metadata: AccountCreateRequest, user_role: RoleEnum
+    ) -> tuple[Account, str]:
         existing_user = self.get_user_by_username(metadata.username)
         if existing_user:
             raise ValueError(f"Username '{metadata.username}' is already taken.")
         if metadata.role == RoleEnum.student:
             password = self.generate_student_password()
             first_login = False
-        elif metadata.role == RoleEnum.teacher:
+        elif metadata.role == RoleEnum.teacher and user_role == RoleEnum.admin:
             password = self.generate_teacher_password()
             first_login = True
+        elif metadata.role == RoleEnum.teacher and user_role != RoleEnum.admin:
+            raise PermissionError("Only admin users can create teacher accounts.")
         else:
-            raise PermissionError(
+            raise ValueError(
                 "Only student and teacher accounts can be created via this endpoint."
             )
 
@@ -167,7 +171,7 @@ class AuthService:
         self, bulk_data: BulkCreateRequest, user_role: RoleEnum
     ) -> BulkCreateResponse:
         if bulk_data.role == RoleEnum.admin:
-            raise PermissionError("Cannot create admin accounts via bulk endpoint")
+            raise ValueError("Cannot create admin accounts via bulk endpoint")
         if bulk_data.role == RoleEnum.teacher and user_role != RoleEnum.admin:
             raise PermissionError("Only admins can create teacher accounts.")
         created_accounts = []

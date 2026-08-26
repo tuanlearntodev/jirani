@@ -92,7 +92,7 @@ async def create_user(
     current_user: Account = Depends(RoleChecker([RoleEnum.teacher, RoleEnum.admin])),
 ) -> AccountCreateResponse:
     try:
-        new_user, credential = auth_service.create_user(user_data)
+        new_user, credential = auth_service.create_user(user_data, current_user.role)
         return AccountCreateResponse(username=new_user.username, credential=credential)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
