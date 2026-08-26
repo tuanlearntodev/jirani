@@ -22,7 +22,8 @@ REVEALED_FLAG = Path(DATA_DIR) / ".credentials_revealed"
 
 
 @router.get("", status_code=status.HTTP_200_OK)
-def setup_page(auth_service: AuthService = Depends(get_auth_service)) -> dict:
+def setup_page(auth_service: AuthService = Depends(get_auth_service)) -> dict[str, str]:
+
     if REVEALED_FLAG.exists():
         raise HTTPException(
             status_code=403, detail="admin credentials have already been revealed."
@@ -30,7 +31,10 @@ def setup_page(auth_service: AuthService = Depends(get_auth_service)) -> dict:
     if not CREDENTIALS_FILE.exists():
         password = secrets.token_urlsafe(8)
         credentials = {"username": "admin", "password": password}
-        auth_service.setup_admin_account(credentials["password"])
+        try:
+            auth_service.setup_admin_account(credentials["password"])
+        except ValueError as e:
+            raise HTTPException(status_code=403, detail=str(e)) from e
     else:
         credentials = json.loads(CREDENTIALS_FILE.read_text())
         password = credentials["password"]
@@ -40,5 +44,7 @@ def setup_page(auth_service: AuthService = Depends(get_auth_service)) -> dict:
     REVEALED_FLAG.touch()
 
     return {
-        "message": f"Admin credentials - Username: {credentials['username']}, Password: {password}. Please change the password after first login."
+        "message": (f"Admin credentials - Username: {credentials['username']}, "
+                    f"Password: {password}. "
+                    "Please change the password after first login.")
     }

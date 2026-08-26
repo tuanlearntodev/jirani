@@ -1,6 +1,7 @@
 import random
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from jose import jwt
 from passlib.context import CryptContext
@@ -39,8 +40,10 @@ class AuthService:
         if context == "create" and role == RoleEnum.student:
             pass
         elif context == "self_change" and role == RoleEnum.student:
-            if not password.isdigit() or len(password) < 4:
-                raise ValueError("Password must be a 4-digit number for students.")
+            if len(password) < 4:
+                raise ValueError(
+                    "Password must be at least 4 characters long for students."
+                )
         elif (
             context == "create"
             and role in [RoleEnum.teacher, RoleEnum.admin]
@@ -49,7 +52,8 @@ class AuthService:
         ):
             if len(password) < 8:
                 raise ValueError(
-                    "Password must be at least 8 characters long for teachers and admins."
+                    "Password must be at least 8 characters " 
+                    "long for teachers and admins."
                 )
         elif context == "reset":
             pass
@@ -64,7 +68,9 @@ class AuthService:
 
     @staticmethod
     def get_password_hash(password: str) -> str:
-        return pwd_context.hash(password)
+        result = pwd_context.hash(password)
+        assert isinstance(result, str)
+        return result
 
     def get_user_by_username(self, username: str) -> Account | None:
         return self.auth_repo.get_by_username(username)
@@ -117,11 +123,15 @@ class AuthService:
         return user
 
     @staticmethod
-    def create_access_token(data: dict) -> str:
+    def create_access_token(data: dict[str, Any]) -> str:
         to_encode = data.copy()
         expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         to_encode.update({"exp": expire})
-        return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+        result = jwt.encode(
+            to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
+        )
+        assert isinstance(result, str)
+        return result
 
     @staticmethod
     def create_token_for_user(account: Account) -> str:
@@ -149,7 +159,9 @@ class AuthService:
             password = self.generate_teacher_password()
             hashed_password = self.get_password_hash(password)
         user.hashed_password = hashed_password
-        self.auth_repo.change_password(user, user.hashed_password)
+        self.auth_repo.change_password(
+            user, user.hashed_password, first_login=user.role == RoleEnum.teacher
+        )
         return user, password
 
     def setup_admin_account(self, password: str) -> Account:
@@ -177,7 +189,7 @@ class AuthService:
         created_accounts = []
         number = self.auth_repo.get_next_prefix_number(bulk_data.prefix)
 
-        for i in range(bulk_data.count):
+        for _i in range(bulk_data.count):
             username = f"{bulk_data.prefix}{number:03d}"
             number += 1
             if self.get_user_by_username(username):
@@ -198,8 +210,8 @@ class AuthService:
                 username=username,
                 hashed_password=hashed_password,
                 role=bulk_data.role,
-                first_name=bulk_data.first_name,
-                last_name=bulk_data.last_name,
+                first_name=bulk_data.role.value,
+                last_name="Account",
                 first_login=first_login,
             )
             self.auth_repo.create_account(new_account)
@@ -217,6 +229,8 @@ class AuthService:
             accounts = self.auth_repo.get_all_users(role=RoleEnum.student)
         elif user_role == RoleEnum.admin:
             accounts = self.auth_repo.get_all_users()
+        else:
+            raise PermissionError("Only teachers and admins can list users.")
         return [AccountRead.model_validate(account) for account in accounts]
 
     def get_user_by_id(self, user_id: int) -> AccountRead:

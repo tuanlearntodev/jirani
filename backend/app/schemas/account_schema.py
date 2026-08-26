@@ -34,8 +34,6 @@ class BulkCreateRequest(BaseModel):
     count: int = Field(..., ge=1, le=100)
     role: RoleEnum
     prefix: str = Field(default="student", min_length=1, max_length=20)
-    first_name: str = Field(default="Student", min_length=1, max_length=50)
-    last_name: str = Field(default="Account", min_length=1, max_length=50)
 
 
 class BulkCredentialItem(BaseModel):

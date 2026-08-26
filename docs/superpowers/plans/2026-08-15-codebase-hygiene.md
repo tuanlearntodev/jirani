@@ -915,7 +915,7 @@ This is the difference between **authentication** (who are you), **coarse author
 
 *3. Exception type is API design.* `create_user` raises `PermissionError` for admin-role creation, and the router maps `PermissionError` → 403. But 403 means "you lack permission" and implies a different caller might succeed. Nobody can create an admin through this endpoint — `/setup` is the only bootstrap — so the request itself is malformed, which is **400**. Distinguishing "you may not" from "this is never valid" is not pedantry: a client can meaningfully retry a 403 with elevated credentials, and can never usefully retry this. The convention for this codebase: `ValueError` → 400, `PermissionError` → 403.
 
-- [ ] **Step 1: Confirm the harness before touching anything**
+- [x] **Step 1: Confirm the harness before touching anything**
 
 ```bash
 cd backend && uv run pytest app/tests -v
@@ -923,7 +923,7 @@ cd backend && uv run pytest app/tests -v
 
 Expected: passing. Part A's S1 made `app.tests` a real package, so the helper imports below resolve.
 
-- [ ] **Step 2: Write the failing `verify_password` tests**
+- [x] **Step 2: Write the failing `verify_password` tests**
 
 Append to `backend/app/tests/test_auth.py`. Two cases:
 1. `test_verify_password_wrong_password_returns_false` — hash `"right-password"` with `AuthService.get_password_hash(...)`, then assert `verify_password("wrong-password", hashed) is False`
@@ -938,7 +938,7 @@ def test_verify_password_wrong_password_returns_false() -> None:
     assert AuthService.verify_password("wrong-password", hashed) is False
 ```
 
-- [ ] **Step 3: Run and watch it fail**
+- [x] **Step 3: Run and watch it fail**
 
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -k "verify_password" -v
@@ -946,11 +946,11 @@ cd backend && uv run pytest app/tests/test_auth.py -k "verify_password" -v
 
 Expected: `test_verify_password_wrong_password_returns_false` FAILS with `ValueError: Invalid password format.` **That failure is the bug report** — it is the 500 reproduced at the unit level. Do not proceed until you have seen it.
 
-- [ ] **Step 4: Fix `verify_password` (`auth_service.py:59-63`)**
+- [x] **Step 4: Fix `verify_password` (`auth_service.py:59-63`)**
 
 Hint: the whole `if/raise` structure collapses to one expression. `pwd_context.verify` already returns the bool you want and already raises on a genuinely malformed stored hash — the docstring should say exactly that (match → `True`, mismatch → `False`, malformed stored hash → raises on its own). Write the one-line body yourself; the essence is: stop interfering.
 
-- [ ] **Step 5: Green**
+- [x] **Step 5: Green**
 
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -k "verify_password" -v
@@ -958,7 +958,7 @@ cd backend && uv run pytest app/tests/test_auth.py -k "verify_password" -v
 
 Expected: 2 passed. `authenticate_user`'s dead `return None` branch is now reachable, so `/auth/token` returns 401 instead of 500 — verified end-to-end in Task A3.
 
-- [ ] **Step 6: Write the failing RBAC tests**
+- [x] **Step 6: Write the failing RBAC tests**
 
 Add a `service_for(db)` helper — it constructs `AuthService(AuthRepo(db))` (sample below) — then three tests, each calling `service_for(db).create_user(AccountCreateRequest(username=..., role=..., first_name="A", last_name="B"), user_role=...)`:
 
@@ -974,7 +974,7 @@ def service_for(db) -> AuthService:
     return AuthService(AuthRepo(db))
 ```
 
-- [ ] **Step 7: Run — three distinct failures**
+- [x] **Step 7: Run — three distinct failures**
 
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -k "create_admin or create_teacher" -v
@@ -982,7 +982,7 @@ cd backend && uv run pytest app/tests/test_auth.py -k "create_admin or create_te
 
 Expected: all three fail with `TypeError: create_user() got an unexpected keyword argument 'user_role'` — the parameter does not exist yet. That single signature error masks the three underlying behaviors; after Step 8 they must all pass for the *right* reasons.
 
-- [ ] **Step 8: Fix `create_user` (`auth_service.py:80-105`)**
+- [x] **Step 8: Fix `create_user` (`auth_service.py:80-105`)**
 
 Add the `user_role: RoleEnum` parameter (`-> tuple[Account, str]`), then write **five guards before any work** — validate first, mutate second, so a rejected request never leaves a partial write:
 1. existing username → `ValueError("... already taken.")`
@@ -993,7 +993,7 @@ Add the `user_role: RoleEnum` parameter (`-> tuple[Account, str]`), then write *
 
 Hint: the existing body already has the duplicate-username guard and the account build — you are inserting the three authorization guards in front and threading `user_role` through the signature. The exact exception types are contract (ValueError→400, PermissionError→403): get them wrong and the router maps wrong.
 
-- [ ] **Step 9: Align `bulk_create_users` (`auth_service.py:171-172`)**
+- [x] **Step 9: Align `bulk_create_users` (`auth_service.py:171-172`)**
 
 It already receives `user_role`, but raises `PermissionError` (→403) for the admin case. Make it consistent with `create_user`:
 
@@ -1006,7 +1006,7 @@ It already receives `user_role`, but raises `PermissionError` (→403) for the a
 
 **The same rule must produce the same status code on every endpoint that enforces it.** Divergent behavior between `/users` and `/users/bulk` is a bug even when each is individually defensible.
 
-- [ ] **Step 10: Pass the caller's role from the router (`auth_router.py:95`)**
+- [x] **Step 10: Pass the caller's role from the router (`auth_router.py:95`)**
 
 ```python
         new_user, credential = auth_service.create_user(user_data, current_user.role)
@@ -1014,7 +1014,7 @@ It already receives `user_role`, but raises `PermissionError` (→403) for the a
 
 No mapping changes needed — lines 97-100 already map `ValueError`→400 and `PermissionError`→403.
 
-- [ ] **Step 11: Run + commit**
+- [x] **Step 11: Run + commit**
 
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -v
@@ -1045,6 +1045,8 @@ git commit -m "fix: auth defects — verify_password returns bool, RBAC on creat
 - Consumes: Task A1 outputs
 - Produces: student self-change = any chars, len ≥ 4; teacher resetting a teacher → 403; admin reset of a teacher keeps `first_login=True`; duplicate usernames → 400 even under a race; `/setup` never 500s; `%` in a bulk prefix is literal
 
+> **Decision (2026-08-26):** drop `first_name` / `last_name` from `BulkCreateRequest` (Option A — user-approved). The `accounts.first_name`/`last_name` columns are `NOT NULL` (`models/account.py:19-20`), so `bulk_create_users` stamps `first_name=bulk_data.role.value`, `last_name="Account"` instead of reading the request fields. Bulk-created teachers stay allowed and are currently anonymous (no rename endpoint yet — deferred). Request contract becomes `{count, role, prefix}`; the `%`-prefix test body needs no names.
+
 **Why (learning):** Six defects; each teaches something different.
 
 *1. Validation rules belong to policy, not to habit.* The student branch requires `password.isdigit()` — a 4-digit PIN. But the message says "4-digit number" while the check also enforces `len >= 4`, and the locked product decision is "≥4 characters, any characters." Rejecting `"cats"` is a usability bug that pushes students toward the ~10⁴ keyspace of digits. Also note `auth_schema.py` already enforces `min_length=4` at the Pydantic layer, so this check is partly redundant. **Where a rule lives matters:** schema-level validation is about *shape* (a string of plausible length) and belongs at the boundary; service-level validation is about *policy* (what this role is allowed) and belongs in the domain.
@@ -1061,7 +1063,7 @@ git commit -m "fix: auth defects — verify_password returns bool, RBAC on creat
 
 *Also in scope:* delete `has_admin()` from `auth_repo.py:33-39` — verified zero call sites repo-wide. Dead code is not free: it must be read, understood, and maintained, and an untested method invites future use as if it were proven. Delete it; git remembers.
 
-- [ ] **Step 1: Failing tests for the student password rule**
+- [x] **Step 1: Failing tests for the student password rule**
 
 Two tests against the static `AuthService.validate_credentials(role, password, context="self_change")`:
 1. `test_student_self_change_accepts_4_char_word` — `"cats"` must NOT raise (today `"cats"` is rejected: `isdigit()` rejects it)
@@ -1073,18 +1075,17 @@ def test_student_self_change_rejects_3_chars() -> None:
     with pytest.raises(ValueError):
         AuthService.validate_credentials(RoleEnum.student, "cat", context="self_change")
 ```
-
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -k "self_change" -v
 ```
 
 Expected: the first FAILS (`"cats"` is not all digits); the second passes already.
 
-- [ ] **Step 2: Fix `validate_credentials` (`auth_service.py:41-43`)**
+- [x] **Step 2: Fix `validate_credentials` (`auth_service.py:41-43`)**
 
 Replace the `isdigit()` check in the `self_change` branch with a plain length check (the rule is "≥4 characters, any characters" — see Why *1). The fix is one `if len(password) < 4: raise ValueError(...)` branch — write it yourself; the message should say "at least 4 characters".
 
-- [ ] **Step 3: Failing tests for reset mapping + `first_login`**
+- [x] **Step 3: Failing tests for reset mapping + `first_login`**
 
 Add the conftest helper import at the top of the file (module-level functions, not fixtures — importable now that `app/tests/__init__.py` exists):
 
@@ -1117,7 +1118,7 @@ And the tests — the shape of each is: setup admin → create victim/actor with
 
 Write the `client.post("/auth/reset-password", json={"account_id": victim_id}, headers=auth_headers(token))` bodies yourself — the helper pattern above is the whole playbook.
 
-- [ ] **Step 4: Run — confirm both failures**
+- [x] **Step 4: Run — confirm both failures**
 
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -k "reset_teacher or keeps_first_login" -v
@@ -1125,7 +1126,7 @@ cd backend && uv run pytest app/tests/test_auth.py -k "reset_teacher or keeps_fi
 
 Expected: the first FAILS with **500** (uncaught `PermissionError`); the second FAILS with `first_login == False`.
 
-- [ ] **Step 5: Fix the router, repo, and service**
+- [x] **Step 5: Fix the router, repo, and service**
 
 `backend/app/api/auth_router.py` — extend `/reset-password`'s handler (after line 62):
 
@@ -1161,22 +1162,24 @@ Expected: the first FAILS with **500** (uncaught `PermissionError`); the second 
 
 The self-change path in `AuthService.change_password` keeps the default `first_login=False` — the user chose their own password, so the flag should clear.
 
-- [ ] **Step 6: Failing tests for the `/setup` race and the `%` prefix**
+- [x] **Step 6: Failing tests for the `/setup` race and the `%` prefix**
+
+> **Deviation (2026-08-26, user-verified):** the `%`-prefix test is a **characterization pin, not red-first**. The plan's red oracle ("wrong usernames today") is unreproducible: `get_next_prefix_number` derives numbers only from rows whose `removeprefix(prefix)` yields digits, so `like(f"{prefix}%")` and `startswith(prefix)` return provably identical numbering in every DB state. Test pins `get_user_by_username("a%1001") is not None` and stays green before and after Step 8.
 
 1. `test_setup_returns_403_when_admin_exists_but_flag_missing` — `GET /setup` once, then **delete BOTH files** (`(setup_paths / ".credentials_revealed").unlink()` AND `(setup_paths / ".credentials").unlink()`), then `GET /setup` again → `403` (today: **500** — the uncaught `ValueError`)
 2. `test_bulk_prefix_with_percent_is_literal` — admin creates 2 students with `prefix="a%1"` via `/auth/users/bulk` → 201 with usernames exactly `["a%1001", "a%1002"]` (today: wrong — `%` acts as a LIKE wildcard)
 
 The race test deletes **both** files — that is what simulates a crash between the DB commit and the flag write. Deleting only the flag would take the `CREDENTIALS_FILE.exists()` branch and never reach the failing path.
 
-- [ ] **Step 7: Harden `/setup` (`setup_router.py:30-33`)**
+- [x] **Step 7: Harden `/setup` (`setup_router.py:30-33`)**
 
 Wrap the creation so the authoritative operation's failure is handled instead of predicted — the shape is `try: setup_admin_account(...) except ValueError: raise HTTPException(403)`. Write it yourself; the one decision to get right is the status code. 403 is right: the admin exists, so the bootstrap is genuinely over — the caller just lost the one chance to see the password. Recovery is an out-of-band password reset, not a retry.
 
-- [ ] **Step 8: Fix the prefix and delete dead code (`auth_repo.py`)**
+- [x] **Step 8: Fix the prefix and delete dead code (`auth_repo.py`)**
 
 Line 51 — one expression: replace the `LIKE`-with-format-string with the operator that expresses the intent: `Account.username.startswith(prefix)` (it auto-escapes `%`/`_`). Then delete `has_admin` (lines 33-39) entirely. If a future feature needs it, add it back **with tests**.
 
-- [ ] **Step 9: Handle `IntegrityError` on the create paths**
+- [x] **Step 9: Handle `IntegrityError` on the create paths**
 
 `backend/app/repositories/auth_repo.py` — add `from sqlalchemy.exc import IntegrityError` at the top and make `create_account` fail cleanly. The repo's contract: `add` → `try: commit()` → `except IntegrityError: rollback() + raise` → on success `refresh` + return. Write it yourself — the essential shape is rollback-then-re-raise, and the reason is in Why *5.
 
@@ -1184,7 +1187,7 @@ The repo rolls back (restoring a usable session) and re-raises — **translating
 
 `backend/app/api/auth_router.py` — import `from sqlalchemy.exc import IntegrityError` and add `except IntegrityError: raise HTTPException(status_code=400, detail="Username conflict - please retry.")` to **both** `create_user` and `bulk_create_users` (two lines each — write them).
 
-- [ ] **Step 10: Fix the latent `get_all_users` crash (`auth_service.py:213-218`)**
+- [x] **Step 10: Fix the latent `get_all_users` crash (`auth_service.py:213-218`)**
 
 `accounts` is only assigned in the teacher and admin branches. Any other role reaches the return statement with the name unbound → `UnboundLocalError` → 500. The router's `RoleChecker` makes it unreachable *today*, but that is a guarantee held by a different file. Fix: add the `else` branch — one line:
 
@@ -1195,7 +1198,7 @@ The repo rolls back (restoring a usable session) and re-raises — **translating
 
 **A function should be correct on its own terms, not because of who currently calls it.** An explicit raise turns a future refactor's silent 500 into a clear 403.
 
-- [ ] **Step 11: Full run + commit**
+- [x] **Step 11: Full run + commit**
 
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -v
@@ -1205,6 +1208,15 @@ Expected: all green.
 
 ```bash
 cd backend && uv run ruff format app/tests app/services/auth_service.py app/repositories/auth_repo.py app/api/auth_router.py app/api/setup_router.py && uv run ruff check app/tests app/services/auth_service.py app/repositories/auth_repo.py app/api/auth_router.py app/api/setup_router.py --ignore B008
+```
+
+```bash
+cd backend && uv run mypy app/api/auth_router.py app/api/setup_router.py app/repositories/auth_repo.py app/schemas/account_schema.py app/services/auth_service.py app/tests/test_auth.py --strict
+```
+
+Expected: 0 errors in these files (A1/A2 gate — touched files end clean).
+
+```bash
 git add -A
 git commit -m "fix: reset-password 403 + first_login semantics, student min-4 rule, setup race, literal bulk prefix"
 ```

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,7 +29,7 @@ def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
 @router.post("/token", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(
     login_data: LoginRequest, auth_service: AuthService = Depends(get_auth_service)
-):
+) -> TokenResponse:
     user = auth_service.authenticate_user(login_data.username, login_data.password)
     if not user:
         raise HTTPException(
@@ -50,7 +51,7 @@ async def reset_password(
     reset_data: ResetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
     current_user: Account = Depends(RoleChecker([RoleEnum.teacher, RoleEnum.admin])),
-):
+) -> dict[str, str]:
     try:
         updated, password = auth_service.reset_password(
             reset_data.account_id, current_user.role
@@ -60,7 +61,9 @@ async def reset_password(
             "new_password": password,
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
 
 
 @router.post("/change-password", status_code=status.HTTP_200_OK)
@@ -70,7 +73,7 @@ async def change_password(
     current_user: Account = Depends(
         RoleChecker([RoleEnum.student, RoleEnum.teacher, RoleEnum.admin])
     ),
-):
+) -> dict[str, str]:
     if not auth_service.verify_password(
         change_data.old_password, current_user.hashed_password
     ):
@@ -82,7 +85,7 @@ async def change_password(
         auth_service.change_password(current_user.username, change_data.new_password)
         return {"message": "Password changed successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
@@ -95,9 +98,13 @@ async def create_user(
         new_user, credential = auth_service.create_user(user_data, current_user.role)
         return AccountCreateResponse(username=new_user.username, credential=credential)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except IntegrityError:
+        raise HTTPException(
+            status_code=400, detail="Username conflict - please retry."
+        ) from None
 
 
 @router.post("/users/bulk", status_code=status.HTTP_201_CREATED)
@@ -110,9 +117,13 @@ async def bulk_create_users(
         response = auth_service.bulk_create_users(bulk_data, current_user.role)
         return response
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except IntegrityError:
+        raise HTTPException(
+            status_code=400, detail="Username conflict - please retry."
+        ) from None
 
 
 @router.get("/users", status_code=status.HTTP_200_OK)
@@ -127,8 +138,8 @@ async def get_all_users(
 async def get_user_by_id(
     current_user: Account = Depends(get_current_user),
     auth_service: AuthService = Depends(get_auth_service),
-):
+) -> AccountRead:
     try:
         return auth_service.get_user_by_id(current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
