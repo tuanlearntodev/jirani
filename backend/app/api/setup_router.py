@@ -44,7 +44,9 @@ def setup_page(auth_service: AuthService = Depends(get_auth_service)) -> dict[st
     REVEALED_FLAG.touch()
 
     return {
-        "message": (f"Admin credentials - Username: {credentials['username']}, "
-                    f"Password: {password}. "
-                    "Please change the password after first login.")
+        "message": (
+            f"Admin credentials - Username: {credentials['username']}, "
+            f"Password: {password}. "
+            "Please change the password after first login."
+        )
     }

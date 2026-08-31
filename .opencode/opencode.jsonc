@@ -50,6 +50,7 @@
       "*": "allow",
       // Application source and infrastructure — the agent advises, you implement.
       "backend/app/**": "deny",
+      "backend/app/tests/**": "ask",
       "backend/pyproject.toml": "deny",
       "backend/uv.lock": "deny",
       "backend/Dockerfile": "deny",

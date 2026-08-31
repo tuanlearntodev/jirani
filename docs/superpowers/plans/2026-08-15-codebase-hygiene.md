@@ -1055,6 +1055,8 @@ git commit -m "fix: auth defects — verify_password returns bool, RBAC on creat
 
 > **Decision (2026-08-26):** drop `first_name` / `last_name` from `BulkCreateRequest` (Option A — user-approved). The `accounts.first_name`/`last_name` columns are `NOT NULL` (`models/account.py:19-20`), so `bulk_create_users` stamps `first_name=bulk_data.role.value`, `last_name="Account"` instead of reading the request fields. Bulk-created teachers stay allowed and are currently anonymous (no rename endpoint yet — deferred). Request contract becomes `{count, role, prefix}`; the `%`-prefix test body needs no names.
 
+> **Decision (2026-08-27, user-approved in session):** students now mint with a **FIXED default password `student123`** and **`first_login=True`** — force password change on first login, identical to teachers. Applies to all three minting paths: `create_user`, `bulk_create_users`, `reset_password`. Replaces `generate_student_password()` (random 6-digit PIN) — the generator and the `random` import become dead code and are deleted. Constants: `STUDENT_DEFAULT_PASSWORD = "student123"` in `auth_service.py` module scope (next to `ACCESS_TOKEN_EXPIRE_MINUTES`); reset's flag becomes unconditional (`first_login=True` — only student/teacher reach it, admin reset already 403s). Self-change policy unchanged (≥4 chars, any chars; repo default clears the flag). TDD: `test_login_student_first_login_false` flips to `..._true` (red) + new `test_admin_reset_of_student_keeps_first_login_true` (red); both green with the service change. Security note: fixed temp credential is acceptable because first login forces replacement — recorded offline-school tradeoff. *Not implemented yet — planned.*
+
 **Why (learning):** Six defects; each teaches something different.
 
 *1. Validation rules belong to policy, not to habit.* The student branch requires `password.isdigit()` — a 4-digit PIN. But the message says "4-digit number" while the check also enforces `len >= 4`, and the locked product decision is "≥4 characters, any characters." Rejecting `"cats"` is a usability bug that pushes students toward the ~10⁴ keyspace of digits. Also note `auth_schema.py` already enforces `min_length=4` at the Pydantic layer, so this check is partly redundant. **Where a rule lives matters:** schema-level validation is about *shape* (a string of plausible length) and belongs at the boundary; service-level validation is about *policy* (what this role is allowed) and belongs in the domain.
@@ -1292,7 +1294,7 @@ response = client.post("/auth/users/bulk", json={"count": 1, "role": "student", 
 - `test_login_wrong_password_is_401` — right username, `"nope"` password → 401
 
 `test_login_wrong_password_is_401` is the end-to-end proof of the A1 `verify_password` fix — before it, this returned 500.
-
+d
 # --- /auth/me ---
 - `test_me_returns_current_user` — GET /auth/me with headers → 200, `username == "admin"`
 - `test_me_without_token_rejected` — no headers → 401 or 403

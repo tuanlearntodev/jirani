@@ -52,7 +52,7 @@ class AuthService:
         ):
             if len(password) < 8:
                 raise ValueError(
-                    "Password must be at least 8 characters " 
+                    "Password must be at least 8 characters "
                     "long for teachers and admins."
                 )
         elif context == "reset":

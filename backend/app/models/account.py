@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -9,6 +11,20 @@ from app.models.role_enum import RoleEnum
 
 class Account(TimestampMixin, Base):
     __tablename__ = "accounts"
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            role: RoleEnum,
+            username: str,
+            hashed_password: str,
+            first_name: str,
+            last_name: str,
+            id: int | None = None,
+            is_active: bool = True,
+            first_login: bool = True,
+        ) -> None: ...
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     role: Mapped[RoleEnum] = mapped_column(SqlEnum(RoleEnum), nullable=False)

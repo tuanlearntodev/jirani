@@ -663,7 +663,7 @@ def test_teacher_resets_student_password(client: TestClient, setup_paths: Path) 
     change_pwd_response = client.post(
         "/auth/reset-password",
         json={"account_id": 3},
-        headers=auth_headers(teacher_token),
+        headers=auth_headers(teacher_token),git commit -m "test: complete auth API and repo coverage"
     )
     assert change_pwd_response.status_code == 200, change_pwd_response.text
 

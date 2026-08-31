@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -12,6 +14,23 @@ class Book(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_books_metadata_gin", "metadata", postgresql_using="gin"),
     )
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            uid: str,
+            title: str,
+            author: str | None = None,
+            level: str | None = None,
+            book_type: str | None = None,
+            id: int | None = None,
+            language: str | None = None,
+            cover_path: str | None = None,
+            file_path: str | None = None,
+            extension: str | None = None,
+            metadata_: dict | None = None,
+        ) -> None: ...
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     uid: Mapped[str] = mapped_column(
