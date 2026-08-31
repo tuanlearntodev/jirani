@@ -1252,7 +1252,7 @@ Two things worth internalizing from the shape of this suite:
 
 *Test isolation is a design property.* The `reset_db` fixture is `autouse=True` and drops/recreates every table before each test, so tests can assume an empty database and can run in any order. Without it, `test_repo_next_prefix_continues_from_max` would see accounts created by earlier tests and produce a different number depending on the run order — the kind of flake that costs a day. **A test that depends on another test having run first is not a test, it is a fixture with extra steps.**
 
-- [ ] **Step 1: Append the `AuthRepo` tests**
+- [x] **Step 1: Append the `AuthRepo` tests**
 
 Nine characterization tests against the repo directly (imports inside the test bodies: `from app.models import Account`, `from app.repositories import AuthRepo`). Each seeds via `AuthRepo(db).create_account(Account(...))` (see the construction idiom below) and asserts the repo's view of the world:
 
@@ -1273,7 +1273,7 @@ AuthRepo(db).create_account(
 ```
 The last two pin the A2 keyword-only parameter in both directions — the default and the override.
 
-- [ ] **Step 2: Append the HTTP integration tests**
+- [x] **Step 2: Append the HTTP integration tests**
 
 `auth_headers` / `login` / `setup_admin` and `_create_teacher` / `_account_id` were already added in A2 Step 3 — **do not redefine them.** Every test here is the same choreography — setup admin, log in, act with headers — so once you have the first body, the rest are variations:
 
@@ -1326,7 +1326,7 @@ d
 
 `test_change_password_wrong_old_password_is_400` covers the *second* `verify_password` call site — `auth_router.py:74`, outside any `try` — which returned 500 before A1.
 
-- [ ] **Step 3: Run the whole file**
+- [x] **Step 3: Run the whole file**
 
 ```bash
 cd backend && uv run pytest app/tests/test_auth.py -v
@@ -1334,7 +1334,7 @@ cd backend && uv run pytest app/tests/test_auth.py -v
 
 Expected: all green. Any red test here is a genuine finding — investigate, do not adjust the assertion to match the behavior.
 
-- [ ] **Step 4: Lint + commit**
+- [x] **Step 4: Lint + commit**
 
 ```bash
 cd backend && uv run ruff format app/tests/ && uv run ruff check app/tests/ --ignore B008
@@ -1342,7 +1342,7 @@ git add backend/app/tests/test_auth.py
 git commit -m "test: complete auth API and repo coverage"
 ```
 
-- [ ] **Step 5: Final gate**
+- [x] **Step 5: Final gate**
 
 ```bash
 cd backend && uv run ruff format . && uv run ruff check . --fix --ignore B008

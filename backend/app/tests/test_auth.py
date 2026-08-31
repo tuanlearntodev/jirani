@@ -658,12 +658,13 @@ def test_teacher_resets_student_password(client: TestClient, setup_paths: Path) 
     teacher_pwd = _create_teacher(client, token, "teacher")
     teacher_token = login(client, "teacher", teacher_pwd)["access_token"]
 
-    _create_students(client, token, 1, "student")[0]
+    student = _create_students(client, token, 1, "student")[0]
+    student_id = _account_id(client, token, student["username"])
 
     change_pwd_response = client.post(
         "/auth/reset-password",
-        json={"account_id": 3},
-        headers=auth_headers(teacher_token),git commit -m "test: complete auth API and repo coverage"
+        json={"account_id": student_id},
+        headers=auth_headers(teacher_token),
     )
     assert change_pwd_response.status_code == 200, change_pwd_response.text
 
