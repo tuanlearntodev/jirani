@@ -1,6 +1,6 @@
 # Project State — Jirani Offline Library Backend
 
-**Last Updated:** 2026-08-26 — hygiene S3 complete (commit 82839d9)
+**Last Updated:** 2026-08-31 — hygiene A3 Step 5 ticked (commit 97eba20)
 **Branch:** refactor
 **Uncommitted:** clean
 
@@ -23,7 +23,7 @@ FastAPI + PostgreSQL backend for an offline library. Auth refactor done. **Hygie
 - [x] **Codebase hygiene plan — S1 package hygiene** — COMPLETE (2026-08-16); next: S2 (one dependency manifest)
 - [x] **Codebase hygiene plan — S2 one dependency manifest** — COMPLETE (2026-08-16): root `uv.lock` + `backend/requirements.txt` deleted, description fixed, `uv sync` + `1 passed`; next: S3 (settings-driven upload paths)
 - [x] **Codebase hygiene plan — S4 Dockerfile/entrypoint** — COMPLETE (2026-08-19): uv-based build on python 3.13-slim, entrypoint wired, CRLF normalization committed (a009577), image verified (3.13.15, deps ok, upload dirs at startup)
-- [ ] **Codebase hygiene plan** — `docs/superpowers/plans/2026-08-15-codebase-hygiene.md`, Part B (A3–A4) open **(A1, A2 COMPLETE 2026-08-26; S3, S5, S6 COMPLETE 2026-08-23/26; S2 code landed 2026-08-16 but plan Steps 1–5 still unticked — drift to tick)**
+- [ ] **Codebase hygiene plan** — `docs/superpowers/plans/2026-08-15-codebase-hygiene.md`, Part B **(A1–A3 COMPLETE 2026-08-31; A4 open)** — A4: `config.py`/`database.py` residual type debt, then re-run the S6 gate; Part B done when green modulo named owners. *(S3, S5, S6 COMPLETE 2026-08-23/26; S2 code landed 2026-08-16 but plan Steps 1–5 still unticked — drift to tick)*
 
 ## Remind Me (Future)
 - [ ] Set up Alembic migrations (replaces manual DROP TABLE workflow) (priority: low, added: 2026-07-08) — **now Task S5 of the hygiene plan** *(S5 complete 2026-08-23)*
@@ -103,7 +103,7 @@ Tracked so they shrink instead of becoming permanent. Four close when the hygien
 3. [x] **Hygiene S2 (one dependency manifest)** — COMPLETE 2026-08-16. **Landed before S4** as required (Dockerfile installs from `uv.lock`).
 4. [x] **Hygiene S5 (Alembic adoption)** — COMPLETE 2026-08-23. Baseline `70ee18aafdca`, dev DB stamped, `create_all` removed, container migrates on boot. Plan Step 9 (e2e from clean volume) still open — requests `docker compose down -v`.
 5. [x] **Hygiene S6 (document structure decisions)** — COMPLETE 2026-08-23 (README Notes, ruff/mypy config pin, debt ledger formalized; image builds, suite `1 passed`).
-6. [x] Hygiene **Part B** — ~~A1~~ ~~A2~~ **DONE 2026-08-26** → **A3** (complete auth repo + API test suite) → **A4** (`config.py`+`database.py`, 3 errors; then re-run the S6 gate — Part B done when green modulo named owners).
+6. [x] Hygiene **Part B** — ~~A1~~ ~~A2~~ ~~A3~~ **DONE 2026-08-31** → **A4** (`config.py`+`database.py`, 3 errors; then re-run the S6 gate — Part B done when green modulo named owners).
 7. [x] Hygiene **S3** — **COMPLETE 2026-08-26** (82839d9): settings-driven upload paths at every site, upload contents ignored, `.gitkeep` dropped, import-time dir creation. S2's plan boxes Steps 1–5 still unticked (drift — code landed 08-16 in 547d18b).
 8. [ ] **Audio-video-tag refactor** — `docs/superpowers/plans/2026-08-26-audio-video-tag-refactor.md` — **Part A pins not started**: Task 1 = `test_audio_repo.py` + `test_audio_api.py` characterization pins (seeds through the API, asserts DB rows; bug pins: delete-missing `AttributeError`, partial-commit `upload_multiple`, `FileNotFoundError` stream, missing-whitelist video). Existing harness: `reset_db` autouse fixture in `app/tests/conftest.py:24` — no new helper needed. Docker daemon required.
 9. [ ] Book refactor **Task 0**: `file_type` → `book_type` rename — write the failing test (Step 1), watch it fail (Step 2), then commit rename + test together (Step 9). *(Note: the rename is no longer sitting uncommitted — working tree is clean at 82839d9; verify whether it landed in an earlier commit before Task 0.)*
