@@ -1,5 +1,3 @@
-import random
-import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -24,14 +22,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 120
 class AuthService:
     def __init__(self, auth_repo: AuthRepo):
         self.auth_repo = auth_repo
-
-    @staticmethod
-    def generate_student_password() -> str:
-        return str(random.randint(100000, 999999))
-
-    @staticmethod
-    def generate_teacher_password() -> str:
-        return secrets.token_urlsafe(8)
 
     @staticmethod
     def validate_credentials(
@@ -90,10 +80,10 @@ class AuthService:
         if existing_user:
             raise ValueError(f"Username '{metadata.username}' is already taken.")
         if metadata.role == RoleEnum.student:
-            password = self.generate_student_password()
-            first_login = False
+            password = settings.STUDENT_DEFAULT_PASSWORD
+            first_login = True
         elif metadata.role == RoleEnum.teacher and user_role == RoleEnum.admin:
-            password = self.generate_teacher_password()
+            password = settings.TEACHER_DEFAULT_PASSWORD
             first_login = True
         elif metadata.role == RoleEnum.teacher and user_role != RoleEnum.admin:
             raise PermissionError("Only admin users can create teacher accounts.")
@@ -151,17 +141,15 @@ class AuthService:
         if user.role != RoleEnum.student and user.role != RoleEnum.teacher:
             raise PermissionError("You cannot reset password for admin account.")
         if user.role == RoleEnum.student:
-            password = self.generate_student_password()
+            password = settings.STUDENT_DEFAULT_PASSWORD
             hashed_password = self.get_password_hash(password)
         if user.role == RoleEnum.teacher and user_role == RoleEnum.teacher:
             raise PermissionError("You cannot reset other teachers' passwords.")
         elif user.role == RoleEnum.teacher and user_role == RoleEnum.admin:
-            password = self.generate_teacher_password()
+            password = settings.TEACHER_DEFAULT_PASSWORD
             hashed_password = self.get_password_hash(password)
         user.hashed_password = hashed_password
-        self.auth_repo.change_password(
-            user, user.hashed_password, first_login=user.role == RoleEnum.teacher
-        )
+        self.auth_repo.change_password(user, user.hashed_password, first_login=True)
         return user, password
 
     def setup_admin_account(self, password: str) -> Account:
@@ -196,10 +184,10 @@ class AuthService:
                 continue
 
             if bulk_data.role == RoleEnum.student:
-                password = self.generate_student_password()
-                first_login = False
+                password = settings.STUDENT_DEFAULT_PASSWORD
+                first_login = True
             elif bulk_data.role == RoleEnum.teacher:
-                password = self.generate_teacher_password()
+                password = settings.TEACHER_DEFAULT_PASSWORD
                 first_login = True
             else:
                 raise ValueError(

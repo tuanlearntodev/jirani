@@ -1055,7 +1055,7 @@ git commit -m "fix: auth defects — verify_password returns bool, RBAC on creat
 
 > **Decision (2026-08-26):** drop `first_name` / `last_name` from `BulkCreateRequest` (Option A — user-approved). The `accounts.first_name`/`last_name` columns are `NOT NULL` (`models/account.py:19-20`), so `bulk_create_users` stamps `first_name=bulk_data.role.value`, `last_name="Account"` instead of reading the request fields. Bulk-created teachers stay allowed and are currently anonymous (no rename endpoint yet — deferred). Request contract becomes `{count, role, prefix}`; the `%`-prefix test body needs no names.
 
-> **Decision (2026-08-27, user-approved in session):** students now mint with a **FIXED default password `student123`** and **`first_login=True`** — force password change on first login, identical to teachers. Applies to all three minting paths: `create_user`, `bulk_create_users`, `reset_password`. Replaces `generate_student_password()` (random 6-digit PIN) — the generator and the `random` import become dead code and are deleted. Constants: `STUDENT_DEFAULT_PASSWORD = "student123"` in `auth_service.py` module scope (next to `ACCESS_TOKEN_EXPIRE_MINUTES`); reset's flag becomes unconditional (`first_login=True` — only student/teacher reach it, admin reset already 403s). Self-change policy unchanged (≥4 chars, any chars; repo default clears the flag). TDD: `test_login_student_first_login_false` flips to `..._true` (red) + new `test_admin_reset_of_student_keeps_first_login_true` (red); both green with the service change. Security note: fixed temp credential is acceptable because first login forces replacement — recorded offline-school tradeoff. *Not implemented yet — planned.*
+> **Decision (2026-08-27, user-approved in session):** students now mint with a **FIXED default password `student123`** and **`first_login=True`** — force password change on first login, identical to teachers. Applies to all three minting paths: `create_user`, `bulk_create_users`, `reset_password`. Replaces `generate_student_password()` (random 6-digit PIN) — the generator and the `random` import become dead code and are deleted. Constants: `STUDENT_DEFAULT_PASSWORD = "student123"` in `auth_service.py` module scope (next to `ACCESS_TOKEN_EXPIRE_MINUTES`); reset's flag becomes unconditional (`first_login=True` — only student/teacher reach it, admin reset already 403s). Self-change policy unchanged (≥4 chars, any chars; repo default clears the flag). TDD: `test_login_student_first_login_false` flips to `..._true` (red) + new `test_admin_reset_of_student_keeps_first_login_true` (red); both green with the service change. Security note: fixed temp credential is acceptable because first login forces replacement — recorded offline-school tradeoff. *~~Not implemented yet — planned.~~* **IMPLEMENTED 2026-08-31.** Extended same session (user directive): teachers mint with fixed `TEACHER_DEFAULT_PASSWORD = "teacher123"` on the same three paths — `generate_teacher_password()` and the `secrets` import deleted with the student generator. New pins: `test_create_teacher_returns_default_password`, `test_admin_reset_of_teacher_returns_default_password`, `test_admin_reset_of_student_keeps_first_login_true`; stale `len(credential) == 6` assertion in `test_create_student_by_admin` updated to the new contract. Gate: 45 passed; ruff clean; mypy 0 errors in both touched files (`_create_students` helper annotated `list[dict[str, Any]]` + `cast` to clear the debt it carried); both red runs witnessed in-session (assert False is True / random-base64 != literal). **Settings move 2026-08-31 (user directive: "move the default password to the docker config, remove the hardcoded password"):** the constants moved out of `auth_service.py` into `Settings` (`STUDENT_DEFAULT_PASSWORD`/`TEACHER_DEFAULT_PASSWORD` in `config.py` with same defaults; service reads `settings.*`, six sites) and `docker-compose.yml` backend `environment:` declares both; dev/tests fall back to the config defaults. Behavior-identical refactor — the 45 pins stayed green, no red phase. Pending user application of the compose block + commit.
 
 **Why (learning):** Six defects; each teaches something different.
 
@@ -1374,7 +1374,7 @@ Expected: ruff clean; mypy reports only pre-existing errors (log in STATE.md); f
 
 Fixes are annotation-only (read the call sites in `main.py` / `migrations/env.py` before choosing the exact type). No setting names, no URLs, no behavior changes.
 
-- [ ] **Step 1: Reproduce**
+- [x] **Step 1: Reproduce**
 
 ```bash
 cd backend && uv run mypy app/config.py app/database.py --strict
@@ -1382,11 +1382,11 @@ cd backend && uv run mypy app/config.py app/database.py --strict
 
 Expected: exactly the 3 errors above (2 in `config.py` + 1 in `database.py`).
 
-- [ ] **Step 2: Fix**
+- [x] **Step 2: Fix**
 
 Annotate the two functions at `config.py:56` and `database.py:19` with the type their call sites require, then re-run Step 1 until 0. If mypy surfaces further errors inside `config.py`/`database.py` once the cascade clears, fix those too — the file set is the boundary.
 
-- [ ] **Step 3: Gate + commit**
+- [x] **Step 3: Gate + commit**
 
 ```bash
 cd backend && uv run ruff check app/config.py app/database.py --ignore B008
@@ -1396,7 +1396,7 @@ cd backend && uv run pytest -v
 
 Expected: ruff clean (0), mypy 0, suite green (`1 passed`). Commit: `chore: type-clean config.py and database.py`.
 
-- [ ] **Step 4: Re-run the S6 gate**
+- [x] **Step 4: Re-run the S6 gate**
 
 ```bash
 cd backend && uv run ruff format . && uv run ruff check . --fix --ignore B008

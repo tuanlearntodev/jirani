@@ -1,5 +1,6 @@
 import secrets
 from pathlib import Path
+from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,6 +44,10 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
     MAX_COVER_SIZE: int = 5 * 1024 * 1024  # 5MB
 
+    # Default credentials
+    STUDENT_DEFAULT_PASSWORD: str = "student123"
+    TEACHER_DEFAULT_PASSWORD: str = "teacher123"
+
     @property
     def ALLOWED_EXTENSIONS(self) -> set[str]:
         return {"pdf", "epub"}
@@ -53,7 +58,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(case_sensitive=True)
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         if not self.SECRET_KEY:
             self.SECRET_KEY = get_secret_key()

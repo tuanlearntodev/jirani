@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,15 +39,14 @@ def _create_teacher(client: TestClient, token: str, username: str) -> str:
 
 def _create_students(
     client: TestClient, token: str, count: int, prefix: str
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     response = client.post(
         "/auth/users/bulk",
         json={"count": count, "role": "student", "prefix": prefix},
         headers=auth_headers(token),
     )
     assert response.status_code == 201, response.text
-    accounts = response.json()["accounts"]
-    return accounts
+    return cast(list[dict[str, Any]], response.json()["accounts"])
 
 
 def _account_id(client: TestClient, token: str, username: str) -> int:
@@ -362,6 +362,57 @@ def test_admin_reset_of_teacher_keeps_first_login_true(
     assert me.json()["first_login"] is True
 
 
+def test_admin_reset_of_student_keeps_first_login_true(
+    client: TestClient, setup_paths: Path
+) -> None:
+    admin_pw = setup_admin(client, setup_paths)
+    token = login(client, "admin", admin_pw)["access_token"]
+
+    student = _create_students(client, token, 1, "victim")[0]
+    victim_id = _account_id(client, token, student["username"])
+    response = client.post(
+        "/auth/reset-password",
+        json={"account_id": victim_id},
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200, response.text
+
+    new_password = response.json()["new_password"]
+    assert isinstance(new_password, str)
+
+    victim_login = login(client, student["username"], new_password)
+    assert victim_login["first_login"] is True
+
+
+def test_admin_reset_of_teacher_returns_default_password(
+    client: TestClient, setup_paths: Path
+) -> None:
+    admin_pw = setup_admin(client, setup_paths)
+    token = login(client, "admin", admin_pw)["access_token"]
+
+    _create_teacher(client, token, "victim")
+    victim_id = _account_id(client, token, "victim")
+    response = client.post(
+        "/auth/reset-password",
+        json={"account_id": victim_id},
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["new_password"] == "teacher123"
+
+
+def test_create_teacher_returns_default_password(
+    client: TestClient, setup_paths: Path
+) -> None:
+    admin_pw = setup_admin(client, setup_paths)
+    token = login(client, "admin", admin_pw)["access_token"]
+
+    credential = _create_teacher(client, token, "teacher")
+    assert credential == "teacher123"
+
+
 def test_setup_returns_403_when_admin_exists_but_flag_missing(
     client: TestClient, setup_paths: Path
 ) -> None:
@@ -427,7 +478,7 @@ def test_login_teacher_first_login_true(client: TestClient, setup_paths: Path) -
     assert first_login is True
 
 
-def test_login_student_first_login_false(client: TestClient, setup_paths: Path) -> None:
+def test_login_student_first_login_true(client: TestClient, setup_paths: Path) -> None:
     admin_pwd = setup_admin(client, setup_paths)
     token = login(client, "admin", admin_pwd)["access_token"]
 
@@ -436,7 +487,7 @@ def test_login_student_first_login_false(client: TestClient, setup_paths: Path) 
         "first_login"
     ]
 
-    assert student_first_login is False
+    assert student_first_login is True
 
 
 def test_login_wrong_password_is_401(client: TestClient, setup_paths: Path) -> None:
@@ -480,7 +531,7 @@ def test_create_student_by_admin(client: TestClient, setup_paths: Path) -> None:
 
     assert response.status_code == 201
     assert response.json()["username"] == "student1"
-    assert len(response.json()["credential"]) == 6
+    assert response.json()["credential"] == "student123"
 
 
 def test_create_admin_by_admin_is_400(client: TestClient, setup_paths: Path) -> None:
