@@ -139,7 +139,7 @@ Snapshot of the target files at plan start; every row is struck by a rewrite tas
 
 # PART A — Characterization pins
 
-Part A pins current behavior — including its bugs — per the TDD-workflow spec's decision 2. Every pin is **witnessed green against the legacy code**: that is what makes it a pin rather than a wish. Bugs are pinned as-broken (`pytest.raises(...)`) and flipped red-first in Task 8. Legacy has no auth: Part A requests carry **no headers**; Task 8 adds `auth_headers` and the 401 guards. The single-upload path reads `settings.VIDEO_DIR` per call, so `monkeypatch.setattr(settings, "VIDEO_DIR", tmp_path)` works there.
+Part A pins current behavior — including its bugs — per the TDD-workflow spec's decision 2. Every pin is **witnessed green against the legacy code**: that is what makes it a pin rather than a wish. Bugs are pinned as-broken (`pytest.raises(...)`) and flipped red-first in Task 8. Legacy has no auth: Part A requests carry **no headers**; Task 8 adds `auth_headers` and the 401 guards. Uploads write to `VIDS_DIR`, bound once at module import (`video_router.py:17`) — pins must monkeypatch the module constant (`monkeypatch.setattr(video_router_module, "VIDS_DIR", tmp_path)`), not `settings.VIDEO_DIR`.
 
 ### Task 1: Video characterization pins
 
@@ -166,12 +166,12 @@ def _seed_video(db, *, title: str = "clip", file_path: str = "/tmp/nonexistent.m
 
 Auth is absent on legacy — requests carry no headers.
 
-- [ ] **Step 1: Write `test_video_repo.py`** — three cases:
+- [x] **Step 1: Write `test_video_repo.py`** — three cases:
   1. `create_video` persists: row gets an id; `title`/`description`/`file_path` round-trip; `deleted_at` is `None`
   2. `delete_video` soft-deletes: `deleted_at` set (compare `datetime.now(UTC)` within a small delta), row still present in DB
   3. `delete_video` on a missing id **raises** — the bug pin: `with pytest.raises(AttributeError): Video_Repo(db).delete_video(999999)`
 
-- [ ] **Step 2: Write `test_video_api.py`** — case list (bodies yours):
+- [x] **Step 2: Write `test_video_api.py`** — case list (bodies yours):
   1. `GET /videos/` empty → `200 []`
   2. `GET /videos/` excludes a soft-deleted row (seed two, delete one via repo) — set assertion, no order
   3. Upload happy: `files={"file": ("clip.mp4", b"\x00\x00\x00\x18ftypmp42 mock bytes", "video/mp4")}`, form `title="Intro"`, `description="first"`, `tags="lesson"` → `200`: `title == "Intro"` (form wins), `video_url == f"/videos/stream/{id}"`, tag linked; file under `monkeypatch.setattr(settings, "VIDEO_DIR", tmp_path)`
@@ -188,9 +188,9 @@ Auth is absent on legacy — requests carry no headers.
   14. Stream soft-deleted → `200` (quirk pin)
   15. Missing file on disk → bug pin: `with pytest.raises(FileNotFoundError)` — **flip target for Task 8**
 
-- [ ] **Step 3: Witness green** — `cd backend && uv run pytest app/tests/media/test_video_repo.py app/tests/media/test_video_api.py -v`. Expected: all pass (~18 tests). If a pin fails, fix the **pin** to match verified behavior and record the deviation at the bottom of this task; do not fix legacy code here.
+- [x] **Step 3: Witness green** — `cd backend && uv run pytest app/tests/media/test_video_repo.py app/tests/media/test_video_api.py -v`. Expected: all pass (~18 tests). If a pin fails, fix the **pin** to match verified behavior and record the deviation at the bottom of this task; do not fix legacy code here.
 
-- [ ] **Step 4: Lint + commit**
+- [x] **Step 4: Lint + commit**
 
 ```bash
 cd backend && uv run ruff format app/tests/media/test_video_repo.py app/tests/media/test_video_api.py && uv run ruff check app/tests/media/test_video_repo.py app/tests/media/test_video_api.py --ignore B008
@@ -671,7 +671,7 @@ cd backend && uv run ruff format app/models/book.py app/schemas/book_schema.py a
 
 Expected: 0/0 on all six; full suite green (auth + pins + leaves + entities + the three book probe files).
 
-- [ ] **Step 5h: `/audit` then commit** — dispatch the `invariant-auditor` on the diff (this task exceeds the ~50-line review threshold; the migration SQL especially). On PASS:
+- [ ] **Step 5h: `/done` then commit** — dispatch the `invariant-auditor` on the diff (this task exceeds the ~50-line review threshold; the migration SQL especially). On PASS:
 
 ```bash
 git add backend/app/models/book.py backend/app/models/author.py backend/app/models/level.py backend/app/models/genre.py backend/app/schemas/book_schema.py backend/app/repositories/book_repo.py backend/app/services/book_service.py backend/app/api/book_router.py backend/migrations backend/app/tests/media/test_book_search.py backend/app/tests/media/test_book_stream.py backend/app/tests/media/test_book_upload.py
@@ -1096,7 +1096,7 @@ cd backend && uv run mypy app/models/author.py app/models/level.py app/models/ge
 
 - [ ] **Step 4: Bug-inventory sweep** — `cd backend && grep -rn "uploads/vids\|uploads/audio" app/ --include='*.py' | grep -v tests` → no matches in this plan's touched files (no CWD-relative literals remain there — audio's literal is out of scope and may still match); `grep -rn "print(" app/services/ app/api/` → no matches in the touched files (legacy audio lines may match — out of scope), i.e. verify none of the touched files added any.
 
-- [ ] **Step 5: `/audit` + `/verify`** — dispatch `invariant-auditor` then `verifier` over the accumulated diff. On PASS/PASS proceed; a VIOLATION is a failed gate.
+- [ ] **Step 5: `/done`** — dispatches `invariant-auditor` then `verifier` over the accumulated diff in one gate. On PASS proceed; a VIOLATION or failed run is a failed gate.
 
 - [ ] **Step 6: Delete the superseded artifacts**
 
@@ -1374,13 +1374,13 @@ Note to the React track: this endpoint is the one in-browser reading uses; the S
 
 - **Type consistency:** entity repos produce `get_by_name -> Entity | None` / `get_or_create_by_name -> Entity` (Task 3); Task 5 search consumes `get_by_name`, Task 5 writes consume `get_or_create_by_name` ✓. `BookRead` name fields via `validation_alias` = model `author_name`/`level_name`/`genre_name` properties, both halves in Task 5 ✓. `resolve_stream -> tuple[Path, str]` produced by Task 5 (`BookService`) and Task 8 (`VideoService`), consumed by their routers, both building `f"/media/{kind}/{quote(media_path.name)}"` with kinds `books`/`vids` matching the nginx `/media/` alias ✓. `MediaFileStorage(save_dir)` — Task 7 produces, Task 8 constructs `(settings.VIDEO_DIR)` ✓. `ALLOWED_VIDEO_EXTENSIONS` — Task 7 produces, Task 8 consumes ✓. Detail strings (`Video not found`, `File type .{ext} not allowed`) match Task 1's pinned strings and Task 8's flip asserts ✓. `TagRepo.get_or_create_by_names` — Task 6 produces, Task 8 consumes ✓. Task 1 pin numbering (15 cases) matches Task 8's flip references (cases 5, 8, 11, 12, 14, 15) ✓. Migration `down_revision = "70ee18aafdca"` — the only chain link, no audio revision ✓.
 
-- **Known risks:** (1) Task 5 is the largest unit — mitigated by per-file gates 5b–5e, the fused-commit discipline, and the `/audit` gate; (2) the backfill SQL is hand-written and data-touching — mitigated by the empty-DB round-trip **and** the preserved-data check on `jirani_bk` (5f steps 2–3), neither is skippable; (3) the auth addition on video/tag/book endpoints is behavior-breaking for token-less clients — deliberate, user-approved 2026-09-01; (4) Range behavior leaves pytest permanently — the Task 9 Step 5 curl is the standing mitigation, re-run it after any nginx.conf change; (5) a model change committed without its schema change breaks dev compose — only Task 5 changes schema and carries its migration in the same commit; Task 8's model conversion is zero-delta and needs none; (6) `get_or_create_by_names` must reproduce `ilike` semantics exactly or Task 1's tag-reuse pin (case 6) fails — that pin is the guard; (7) Task 1's cases 5/8/11/15 flip shape in Task 8 — a flip that breaks a different pin means the probe touched the wrong contract; re-read the pin list before "fixing" it; (8) the spec and this plan both carry uncommitted rev-2 edits at plan start — if the spec changes again, this plan follows; read it before starting each task; (9) Part G migrations must run in chain order (task5 → task11 → task13) and Task 11's **physical file move comes before its migration** — reversed order is a 404-on-every-video outage on dev; (10) Task 12's `delete_orphans` must be existence-based, never called from search/read paths — a mutation in a filter breaks the WHERE-false contract and the React search surface.
+- **Known risks:** (1) Task 5 is the largest unit — mitigated by per-file gates 5b–5e, the fused-commit discipline, and the `/done` gate; (2) the backfill SQL is hand-written and data-touching — mitigated by the empty-DB round-trip **and** the preserved-data check on `jirani_bk` (5f steps 2–3), neither is skippable; (3) the auth addition on video/tag/book endpoints is behavior-breaking for token-less clients — deliberate, user-approved 2026-09-01; (4) Range behavior leaves pytest permanently — the Task 9 Step 5 curl is the standing mitigation, re-run it after any nginx.conf change; (5) a model change committed without its schema change breaks dev compose — only Task 5 changes schema and carries its migration in the same commit; Task 8's model conversion is zero-delta and needs none; (6) `get_or_create_by_names` must reproduce `ilike` semantics exactly or Task 1's tag-reuse pin (case 6) fails — that pin is the guard; (7) Task 1's cases 5/8/11/15 flip shape in Task 8 — a flip that breaks a different pin means the probe touched the wrong contract; re-read the pin list before "fixing" it; (8) the spec and this plan both carry uncommitted rev-2 edits at plan start — if the spec changes again, this plan follows; read it before starting each task; (9) Part G migrations must run in chain order (task5 → task11 → task13) and Task 11's **physical file move comes before its migration** — reversed order is a 404-on-every-video outage on dev; (10) Task 12's `delete_orphans` must be existence-based, never called from search/read paths — a mutation in a filter breaks the WHERE-false contract and the React search surface.
 
 ## Execution Handoff
 
 Plan complete and saved to `docs/superpowers/plans/2026-09-01-media-refactor-nginx-entities.md` (rev 2 — audio out of scope). Two execution options:
 
-1. **Learner mode (current convention)** — you implement each task from the contracts, samples, and hints; the agent reviews diffs and runs `/audit` + `/verify` before each commit, and never writes the implementation.
+1. **Learner mode (current convention)** — you implement each task from the contracts, samples, and hints; the agent reviews diffs and runs `/done` (audit + verify) before each commit, and never writes the implementation.
 2. **Subagent-Driven** — dispatch a fresh subagent per task with two-stage review; each task brief must be self-contained (the Interfaces blocks above are the brief material).
 
 Which approach?
