@@ -160,8 +160,8 @@ Six rules. Breaking one requires explicit approval, and you must say which one y
 | # | Invariant | Violating today |
 |---|---|---|
 | 1 | **Layering:** router → service → repository → model. Routers never open a session or query directly. Repositories never raise `HTTPException`. Business rules live in services. | `audio_router`, `video_router`, `tag_router` — inline DB access and tag logic, no service layer |
-| 2 | **Error mapping:** services raise domain exceptions; **only routers** translate them. `ValueError`→400, `PermissionError`→403, not-found→404, `IntegrityError`→400. The same rule returns the same status on every endpoint. | `/auth/reset-password` leaks `PermissionError` → 500 |
-| 3 | **No CWD-relative file I/O.** Every filesystem path derives from `app/config.py` settings anchored to `BASE_DIR`. Never a bare relative string. | `audio_router.py:41,76`, `video_router.py:14` |
+| 2 | **Error mapping:** services raise domain exceptions; **only routers** translate them. `ValueError`→400, `PermissionError`→403, not-found→404, `IntegrityError`→400. The same rule returns the same status on every endpoint. | — (closed by hygiene A2, 2026-08-26) |
+| 3 | **No CWD-relative file I/O.** Every filesystem path derives from `app/config.py` settings anchored to `BASE_DIR`. Never a bare relative string. | — (closed by hygiene S3; routers read `settings.AUDIO_DIR`/`VIDEO_DIR`, `config.py:42-43`) |
 | 4 | **SQLAlchemy 2.0** (`Mapped[]`, `mapped_column`, `select()`) in all new or modified code. Legacy 1.x is grandfathered only until its module gets tests. | `Audio`/`Video` models and join tables; `BookRepo`, `TagRepo` still use `query()` |
 | 5 | **Tests run on PostgreSQL** via testcontainers — never SQLite (JSONB/GIN are not expressible there). Never delete a failing test to go green. Write characterization tests before refactoring untested code. TDD per the Test-Driven Development section: characterization first on legacy code, red-green-refactor for new behavior and bugfixes. | book, audio, video, tag modules have zero tests |
 | 6 | **Naming:** `PascalCase` classes with no underscores; `snake_case` for functions and modules. | `Audio_Repo`, `Video_Repo`, `Audio_Create`, `Video_Create` |
@@ -177,7 +177,7 @@ backend/app/
   schemas/       Pydantic; layered Base → Create → Read → Update
   dependencies/  FastAPI DI (get_current_user, RoleChecker)
   config.py      ALL paths and settings, anchored to BASE_DIR
-  tests/         mirrors module names: test_<module>_repo.py, test_<module>_api.py
+  tests/         subfolders per area (auth/, media/…): test_<module>_repo.py, test_<module>_api.py
 ```
 
 Where things go:
@@ -229,9 +229,10 @@ you did not know existed.
 
 **Plans are written red-green.** Every plan task that produces code has the
 book-refactor shape: write failing test → run and record the red output →
-implement → run and record green → lint/type → commit. The book-refactor plan
-Tasks 0–5 (`docs/superpowers/plans/2026-08-16-book-refactor.md`) is the
-reference pattern.
+implement → run and record green → lint/type → commit. The reference pattern is
+Task 5 of the media refactor plan
+(`docs/superpowers/plans/2026-09-01-media-refactor-nginx-entities.md`) — a fused
+rewrite with a data-preserving migration, red-first probes, and per-file gates.
 
 **Coder briefs are red-first.** The brief block names the failing test as the
 first artifact and a VERIFY command expected to fail before implementation. A
@@ -296,19 +297,6 @@ Do not commit the code and tick the box in two commits, and do not defer the tic
 
 One tree only: `docs/superpowers/plans/` and `docs/superpowers/specs/`. All new plans and specs go here.
 
-The older `docs/plans/` and `docs/specs/` trees were deleted on 2026-08-16 — the auth work was fully committed, and the book refactor was superseded by `docs/superpowers/plans/2026-08-16-book-refactor.md` + its spec. Recover any of them from git history (`git log --follow -- docs/plans/<file>`) if ever needed; do not recreate the tree.
+The older `docs/plans/` and `docs/specs/` trees were deleted on 2026-08-16 — the auth work was fully committed. The book-refactor and audio-video-tag refactors were then superseded on 2026-09-01 by `docs/superpowers/specs/2026-09-01-media-refactor-nginx-entities-design.md` + its plan; the media plan's Task 10 deletes those older files. Recover any deleted plan from git history (`git log --follow -- docs/plans/<file>` or `docs/superpowers/plans/<file>`) if ever needed; do not recreate the tree.
 
-Two plans are in flight: `2026-08-15-codebase-hygiene` (structure + auth) and `2026-08-16-book-refactor`. `2026-05-26-monorepo-restructure` is largely complete.
-
-## Migration in Flight
-
-`docs/superpowers/plans/2026-08-15-codebase-hygiene.md` moves the tree to the state the invariants above describe. **Not yet true as of 2026-08-15:**
-
-- Alembic is declared but unused; `app/main.py` still calls `Base.metadata.create_all`.
-- Root `uv.lock` and `backend/requirements.txt` still exist and have drifted from `backend/uv.lock`.
-- `app/tests/__init__.py` and `app/dependencies/__init__.py` are missing, so `app.tests` is not an importable package.
-- `app/__init__.py` eagerly imports every subpackage and lists an undefined name in `__all__`.
-- Upload paths in `audio_router` and `video_router` are still CWD-relative; `AUDIO_DIR`/`VIDEO_DIR` do not exist in `config.py`.
-- `Dockerfile` is on `python:3.11-slim` + `pip`; `docker/entrypoint.sh` exists but is never wired into the image.
-
-Delete this section once that plan is executed. The invariants stay.
+The hygiene plan `2026-08-15-codebase-hygiene` is **complete** (74/74 boxes, git-verified 2026-09-01; S1–S6 + Part B A1–A4). It is no longer in flight — its debt ledger is historical; read it only for the invariant-table context. The one plan in flight is `2026-09-01-media-refactor-nginx-entities` (books/video refactor + nginx X-Accel + author/level/genre entities + Part G follow-ons; audio deferred to its own future plan). `2026-05-26-monorepo-restructure` is largely complete. The `2026-08-16-book-refactor` and `2026-08-26-audio-video-tag-refactor` plans are superseded by the 2026-09-01 media plan; its Task 10 deletes them.
