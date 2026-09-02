@@ -125,17 +125,19 @@ Snapshot of the target files at plan start; every row is struck by a rewrite tas
 | `app/api/tag_router.py` | 0 | 1 | 6 (rewrite) |
 | `app/api/book_router.py` | 3 | 22 | 5 (rewrite) |
 | `app/services/book_service.py` | 15 | 17 | 5 (rewrite) |
-| `app/repositories/book_repo.py` | 2 | 1 | 5 (rewrite) |
+| `app/repositories/book_repo.py` | 2 | 2 | 5 (rewrite) |
 | `app/schemas/book_schema.py` | 0 | 2 | 5 (rewrite) |
-| `app/models/book.py`, `book_tag.py` | 0 | 3 | 5 |
-| `app/models/tag.py` | 0 | 1 | 6 (touch — clear or log) |
+| `app/models/book.py`, `book_tag.py` | 0 | 2 | 5 |
+| `app/models/tag.py` | 0 | 0 | 6 (touch — clear or log) |
 | `app/repositories/video_repo.py` | 0 | 2 | 8 (rewrite) |
 | `app/repositories/tag_repo.py` | 0 | 2 | 6 (rewrite) |
-| `app/models/video.py`, `video_tag.py` | 0 | 4 | 8 (rewrite) |
+| `app/models/video.py`, `video_tag.py` | 0 | 0 | 8 (rewrite) |
 | `app/schemas/video_schema.py` | 0 | 0 | 8 renames keep it at 0 |
-| `app/api/audio_router.py` (0/19), `app/repositories/audio_repo.py` (0/5), `app/models/audio.py`+`audio_tag.py` (0/4) | — | — | **deferred — the future audio plan owns these; do not touch** |
+| `app/api/audio_router.py` (0/19), `app/repositories/audio_repo.py` (0/5), `app/models/audio.py`+`audio_tag.py` (0/0) | — | — | **deferred — the future audio plan owns these; do not touch** |
 
 > Re-measure at plan start with `uv run mypy <files> --strict`; if a number moved, update the row — the "strike the row" gate is 0/0 per file, whatever the starting value.
+
+> Task 3 (2026-09-02): `database.py`'s `Base` typed proper (`class Base(DeclarativeBase)` — user-approved). Struck the `Class cannot subclass "Base" (has type "Any")` error from every model row above; surfaced two honest `file_type` attr-errors in `book_repo.py` (+1) and kept `book_service.py` at 17 — both files are struck by Task 5's fused rewrite.
 
 # PART A — Characterization pins
 
@@ -316,7 +318,7 @@ No POST/PATCH/DELETE — entities are created implicitly by upload/update and li
 
 **Why (learning):** three carbon-copy modules are the point, not the waste — each is *one* drill of the pattern `Tag` establishes, and `get_by_name`/`get_or_create_by_name` are the semantics Task 5 stands on. The search/write split matters: search must never create rows (searching for a nonexistent author returns zero books), writes may. `func.lower(Entity.name) == name` reproduces `ilike`'s case-insensitive match in 2.0 idiom so nothing stores `NULL` or a typo case. All three entities live on books only — with audio out of scope there is no `audio.author_id`, no `Author.audio_tracks`, no audio router consuming these.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `test_entity_repos.py` — parametrize over the three `(RepoClass, ModelClass)` pairs; cases:
 1. `get_by_name("MATH")` after creating `Model(name="Math")` → returns the row (stored case `"Math"`); `get_by_name("missing")` → `None`
@@ -328,13 +330,13 @@ No POST/PATCH/DELETE — entities are created implicitly by upload/update and li
 1. Authed `GET` → `200`, list of `{id, name}` (seed 2 rows per entity)
 2. Unauthenticated `GET` → `401`
 
-- [ ] **Step 2: Verify red** — `cd backend && uv run pytest app/tests/media/test_entity_repos.py app/tests/media/test_entity_api.py -v`. Expected: collection ERROR `ModuleNotFoundError: No module named 'app.models.author'`.
+- [x] **Step 2: Verify red** — `cd backend && uv run pytest app/tests/media/test_entity_repos.py app/tests/media/test_entity_api.py -v`. Expected: collection ERROR `ModuleNotFoundError: No module named 'app.models.author'`.
 
-- [ ] **Step 3: Implement all fifteen files** per the Interfaces. The three routers join `api/__init__.py`, the repos join `repositories/__init__.py` (`__all__`), and `main.py` includes the routers.
+- [x] **Step 3: Implement all fifteen files** per the Interfaces. The three routers join `api/__init__.py`, the repos join `repositories/__init__.py` (`__all__`), and `main.py` includes the routers.
 
-- [ ] **Step 4: Verify green** — `cd backend && uv run pytest app/tests/media/test_entity_repos.py app/tests/media/test_entity_api.py -v`. Expected: all pass.
+- [x] **Step 4: Verify green** — `cd backend && uv run pytest app/tests/media/test_entity_repos.py app/tests/media/test_entity_api.py -v`. Expected: all pass.
 
-- [ ] **Step 5: Format, lint, type-check**
+- [x] **Step 5: Format, lint, type-check**
 
 ```bash
 cd backend && uv run ruff format app/models/author.py app/models/level.py app/models/genre.py app/schemas/author_schema.py app/schemas/level_schema.py app/schemas/genre_schema.py app/repositories/author_repo.py app/repositories/level_repo.py app/repositories/genre_repo.py app/services/author_service.py app/services/level_service.py app/services/genre_service.py app/api/author_router.py app/api/level_router.py app/api/genre_router.py app/models/__init__.py app/repositories/__init__.py app/api/__init__.py app/main.py app/tests/media/test_entity_repos.py app/tests/media/test_entity_api.py && uv run ruff check app/models/author.py app/models/level.py app/models/genre.py app/schemas/author_schema.py app/schemas/level_schema.py app/schemas/genre_schema.py app/repositories/author_repo.py app/repositories/level_repo.py app/repositories/genre_repo.py app/services/author_service.py app/services/level_service.py app/services/genre_service.py app/api/author_router.py app/api/level_router.py app/api/genre_router.py app/models/__init__.py app/repositories/__init__.py app/api/__init__.py app/main.py app/tests/media/test_entity_repos.py app/tests/media/test_entity_api.py --ignore B008 && uv run mypy app/models/author.py app/models/level.py app/models/genre.py app/schemas/author_schema.py app/schemas/level_schema.py app/schemas/genre_schema.py app/repositories/author_repo.py app/repositories/level_repo.py app/repositories/genre_repo.py app/services/author_service.py app/services/level_service.py app/services/genre_service.py app/api/author_router.py app/api/level_router.py app/api/genre_router.py --strict
@@ -342,7 +344,7 @@ cd backend && uv run ruff format app/models/author.py app/models/level.py app/mo
 
 Expected: 0/0 on all new files.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/models/author.py backend/app/models/level.py backend/app/models/genre.py backend/app/models/__init__.py backend/app/schemas/author_schema.py backend/app/schemas/level_schema.py backend/app/schemas/genre_schema.py backend/app/repositories/author_repo.py backend/app/repositories/level_repo.py backend/app/repositories/genre_repo.py backend/app/repositories/__init__.py backend/app/services/author_service.py backend/app/services/level_service.py backend/app/services/genre_service.py backend/app/api/author_router.py backend/app/api/level_router.py backend/app/api/genre_router.py backend/app/api/__init__.py backend/app/main.py backend/app/tests/media/test_entity_repos.py backend/app/tests/media/test_entity_api.py

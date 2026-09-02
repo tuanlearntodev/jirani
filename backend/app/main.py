@@ -9,7 +9,10 @@ from app import models  # noqa: F401
 from app.api import (
     audio_router,
     auth_router,
+    author_router,
     book_router,
+    genre_router,
+    level_router,
     setup_router,
     tag_router,
     video_router,
@@ -58,6 +61,9 @@ app.include_router(video_router.router)
 app.include_router(tag_router.router)
 app.include_router(audio_router.router)
 app.include_router(setup_router.router)
+app.include_router(author_router.router)
+app.include_router(genre_router.router)
+app.include_router(level_router.router)
 
 
 @app.get("/")
