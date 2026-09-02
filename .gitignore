@@ -18,6 +18,7 @@ Thumbs.db
 uploads/**
 backend/uploads/**
 *.log
+docs/codebase-structure.txt
 
 # Generated briefings
 todos/
