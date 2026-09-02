@@ -1,41 +1,55 @@
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
 from app.models import Account, RoleEnum
-from typing import Optional
+
 
 class AuthRepo:
     def __init__(self, db_session: Session):
         self.db_session = db_session
 
-    def get_by_username(self, username: str) -> Optional[Account]:
-        return self.db_session.query(Account).filter(Account.username == username).first()
-    
-    def get_by_id(self, account_id: int) -> Optional[Account]:
-        return self.db_session.query(Account).filter(Account.id == account_id).first()
-      
+    def get_by_username(self, username: str) -> Account | None:
+        return self.db_session.scalars(
+            select(Account).where(Account.username == username)
+        ).first()
+
+    def get_by_id(self, account_id: int) -> Account | None:
+        return self.db_session.scalars(
+            select(Account).where(Account.id == account_id)
+        ).first()
+
     def create_account(self, account: Account) -> Account:
         self.db_session.add(account)
-        self.db_session.commit()
+        try:
+            self.db_session.commit()
+        except IntegrityError:
+            self.db_session.rollback()
+            raise
         self.db_session.refresh(account)
         return account
-      
-    def get_all_users(self, role: Optional[RoleEnum] = None) -> list[Account]:
-        query = self.db_session.query(Account)
+
+    def get_all_users(self, role: RoleEnum | None = None) -> list[Account]:
+        stmt = select(Account)
         if role is not None:
-            query = query.filter(Account.role == role)
-        return query.all()
-      
-    def has_admin(self) -> bool:
-        return self.db_session.query(Account).filter(Account.role == RoleEnum.admin).first() is not None
-    
-    def change_password(self, account: Account, new_hashed_password: str) -> Account:
+            stmt = stmt.where(Account.role == role)
+        return list(self.db_session.scalars(stmt))
+
+    def change_password(
+        self, account: Account, new_hashed_password: str, *, first_login: bool = False
+    ) -> Account:
         account.hashed_password = new_hashed_password
-        account.first_login = False
+        account.first_login = first_login
         self.db_session.commit()
         self.db_session.refresh(account)
         return account
-    
+
     def get_next_prefix_number(self, prefix: str) -> int:
-        accounts = self.db_session.query(Account).filter(Account.username.like(f"{prefix}%")).all()
+        accounts = list(
+            self.db_session.scalars(
+                select(Account).where(Account.username.startswith(f"{prefix}"))
+            )
+        )
         numbers = []
         for account in accounts:
             suffix = account.username.removeprefix(prefix)

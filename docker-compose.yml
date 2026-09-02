@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
-  jirani-backend:
+  backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -33,6 +33,8 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/jirani_library
       DEBUG: "true"
+      STUDENT_DEFAULT_PASSWORD: student123
+      TEACHER_DEFAULT_PASSWORD: teacher123
     volumes:
       - ./uploads:/app/uploads
 

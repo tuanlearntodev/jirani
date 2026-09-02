@@ -1,19 +1,27 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from app.database import engine, Base
-from app.api import auth_router, book_router, video_router, tag_router, audio_router, setup_router
-from app import settings  # Import models to register them with Base
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os
+from fastapi.staticfiles import StaticFiles
+
+from app import models  # noqa: F401
+from app.api import (
+    audio_router,
+    auth_router,
+    book_router,
+    setup_router,
+    tag_router,
+    video_router,
+)
+from app.config import settings
+from app.database import engine
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
-    Base.metadata.create_all(bind=engine)
-    settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    settings.COVER_DIR.mkdir(parents=True, exist_ok=True)
-    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
     yield
     # Shutdown (if needed)
     engine.dispose()
@@ -23,7 +31,7 @@ app = FastAPI(
     title="Jirani Offline Library Backend",
     description="A FastAPI backend for offline library management",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -33,9 +41,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings.COVER_DIR.mkdir(parents=True, exist_ok=True)
+settings.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+settings.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 # Mount covers directory for public access (books require auth)
 
-app.mount("/static/covers", StaticFiles(directory=str(settings.COVER_DIR)), name="covers")
+app.mount(
+    "/static/covers", StaticFiles(directory=str(settings.COVER_DIR)), name="covers"
+)
 
 app.include_router(auth_router.router)
 app.include_router(book_router.router)
@@ -46,5 +61,5 @@ app.include_router(setup_router.router)
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {"message": "Welcome to Jirani Offline Library Backend"}
