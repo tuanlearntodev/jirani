@@ -15,30 +15,6 @@
     "gh_grep": {
       "type": "remote",
       "url": "https://mcp.grep.app"
-    },
-    "memory": {
-      "type": "local",
-      "command": ["bun", "x", "@modelcontextprotocol/server-memory"],
-      "enabled": true,
-      "environment": {
-        // {env:HOME} resolves on macOS/Linux/WSL/Git Bash.
-        // On native Windows PowerShell/cmd use {env:USERPROFILE} — override in
-        // your global config: ~/.config/opencode/opencode.json
-        "MEMORY_FILE_PATH": "{env:HOME}/.local/share/opencode/memory.jsonl"
-      },
-      "timeout": 10000
-    },
-    "playwright": {
-      "type": "local",
-      "command": ["npx", "@playwright/mcp@latest"],
-      "enabled": true,
-      "timeout": 30000
-    },
-    "sequential-thinking": {
-      "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
-      "enabled": true,
-      "timeout": 10000
     }
   },
   // Enforces the advisory operating mode declared in AGENTS.md.

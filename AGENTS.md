@@ -91,13 +91,10 @@ This workspace runs the `obra/superpowers` skills framework.
 |---|---|---|
 | `context7` | external library docs, current API specs missing from the repo | anything inside this repo |
 | `gh_grep` | how other open-source repos implement a pattern | searching this codebase — use graphify |
-| `memory` | cross-session TODOs and durable decisions | scratch notes within one session |
-| `sequential-thinking` | multi-step problems that need revision mid-reasoning | simple lookups |
-| `playwright` | browser automation, live UI verification | anything not requiring a browser |
 
 ## Project Skills
 
-- **`state`** — owns `STATE.md`. Fires on completion phrases, "remind me to…", commit confirmation, and session handoff. `## Decisions Log` and `## Graveyard` are **append-only**; never delete an entry.
+- **`state`** — owns `STATE.md`. Fires on completion phrases, "remind me to…", and commit confirmation. `## Decisions Log` and `## Graveyard` are **append-only**; never delete an entry.
 - **`todo`** — `/todo` produces a briefing from STATE.md, the active plans, and git log.
 
 ## Subagents
@@ -117,7 +114,7 @@ Subagents run in a **child session with their own context**. Their tool output �
 
 **Why these models:** mechanical work (applying a verbatim brief, running the DoD commands, counting checkboxes) goes to `deepseek-v4-flash` — cheap, and the task carries no judgment. The `invariant-auditor` gets `kimi-k3` because it is the one subagent doing real reasoning — it must distinguish a *new* invariant violation from the pre-existing debt listed in this file, and a weak model there either false-alarms (you learn to ignore it) or misses real ones (worse). Pay for judgment only where judgment lives.
 
-**Invocation:** `@coder <brief>` / `@invariant-auditor <request>` to run one directly, or `/coder`, `/audit`, `/verify`, `/next` for the pre-wired versions that inject the current diff and plan state automatically.
+**Invocation:** `@coder <brief>` / `@invariant-auditor <request>` to run one directly, or `/coder`, `/done` (audit + verify, one gate), `/next` for the pre-wired versions that inject the current diff and plan state automatically.
 
 ### Coder handoff — propose on the strong model, implement on the cheap one
 
@@ -142,7 +139,7 @@ Rules for the brief:
 - **Red-first.** For new behavior or bugfixes the brief leads with the failing test (`RED-FIRST`) and the VERIFY command must be expected to fail before the implementation exists; with the test shown to fail red, then the implementation, then green. Characterization pins over existing legacy code get `RED-FIRST: none — characterization pin`.
 - Only brief when implementation cost is real. A one-line edit or a config flag is not worth the handoff.
 
-After the coder reports back: run `/audit` against the diff, then `/verify`, then commit. The coder never commits.
+After the coder reports back: run `/done` (dispatches the invariant audit + DoD verify in one gate), tick on green, then commit. The coder never commits.
 
 **When the primary agent should dispatch one without being asked:**
 
@@ -247,9 +244,7 @@ brief records no red evidence (outside characterization pins) is NOT DONE.
 
 When the user signals task completion ("verify and commit", "done", "ship it", "we're done", "that's it", "heading out", "goodbye") OR confirms a commit you proposed ("yes", "commit it", "go ahead", "commit please", "push it"), invoke the `state` skill to update `STATE.md` before responding.
 
-When the user says "remind me to do X" / "remember to" / "don't forget to", append to `STATE.md` under "Remind Me (Future)" AND create a Memory MCP TODO entity.
-
-On "session handoff" / "switching machines" / "new machine" / "handoff", do a full `STATE.md` refresh and ensure it's committed. The user resumes on a new machine with `git pull && cat STATE.md`.
+When the user says "remind me to do X" / "remember to" / "don't forget to", append to `STATE.md` under "Remind Me (Future)".
 
 ## Execution Boundaries
 
