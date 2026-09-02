@@ -209,18 +209,18 @@ git commit -m "test: pin video module behavior — list, upload, patch, delete, 
 **Interfaces:**
 - Produces: the pinned statement Task 6 preserves — `GET /tags/` is an unordered list of `{id, name}`; `get_tag_by_id` returns `None` on a missing id (legacy `.first()`); `create_tag` applies the `TagCreate` validator (whitespace collapse, charset, length). `get_tag_by_id` and `create_tag` are dead in the app today (only `tag_router → get_all_tags` calls `TagRepo`) — their pins become their deletion's justification
 
-- [ ] **Step 1: Write `test_tag_repo.py`:**
+- [x] **Step 1: Write `test_tag_repo.py`:**
   1. `get_all_tags` returns seeded rows (three) — set of names
   2. `get_tag_by_id(seeded)` → row with `name`; `get_tag_by_id(999999)` → `None`
   3. `create_tag(TagCreate(name="  Math  "))` → stored `"Math"`; re-run with `"Math"` → unique-constraint `IntegrityError` (DB is the guarantee; `ilike` matching is UX)
 
-- [ ] **Step 2: Write `test_tag_api.py`:**
+- [x] **Step 2: Write `test_tag_api.py`:**
   1. `GET /tags/` empty → `200 []`
   2. `GET /tags/` with three seeded → `200`, set of `{id, name}`
 
-- [ ] **Step 3: Witness green** — `cd backend && uv run pytest app/tests/media/test_tag_repo.py app/tests/media/test_tag_api.py -v`. Expected: all pass.
+- [x] **Step 3: Witness green** — `cd backend && uv run pytest app/tests/media/test_tag_repo.py app/tests/media/test_tag_api.py -v`. Expected: all pass.
 
-- [ ] **Step 4: Lint + commit**
+- [x] **Step 4: Lint + commit**
 
 ```bash
 cd backend && uv run ruff format app/tests/media/test_tag_repo.py app/tests/media/test_tag_api.py && uv run ruff check app/tests/media/test_tag_repo.py app/tests/media/test_tag_api.py --ignore B008
