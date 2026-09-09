@@ -15,19 +15,23 @@ class BookRepo:
         self.db_session = db_session
 
     def get_book_by_uid(self, book_uid: str) -> Book | None:
-        stmt = select(Book).options(selectinload(Book.author), 
-                                    selectinload(Book.level), 
-                                    selectinload(Book.genre),
-                                    selectinload(Book.tags)).where(Book.uid == book_uid)
+        stmt = (
+            select(Book)
+            .options(
+                selectinload(Book.author),
+                selectinload(Book.level),
+                selectinload(Book.genre),
+                selectinload(Book.tags),
+            )
+            .where(Book.uid == book_uid)
+        )
         return self.db_session.execute(stmt).scalar_one_or_none()
 
     def create_book(self, book_create: BookCreate) -> Book:
         tag_data = book_create.tags
         book_dict = book_create.model_dump(exclude={"tags"})
 
-        existing = (
-            self.get_book_by_uid(book_create.uid)
-        )
+        existing = self.get_book_by_uid(book_create.uid)
         if existing:
             raise ValueError(f"Book with UID {book_create.uid} already exists")
 
@@ -35,10 +39,8 @@ class BookRepo:
 
         if tag_data:
             for tag_in in tag_data:
-                tag = (
-                    self.db_session.scalar(
-                        select(Tag).where(Tag.name.ilike(tag_in.name))
-                    )
+                tag = self.db_session.scalar(
+                    select(Tag).where(Tag.name.ilike(tag_in.name))
                 )
                 if not tag:
                     tag = Tag(name=tag_in.name.strip().lower())
@@ -51,19 +53,15 @@ class BookRepo:
             return new_book
         except IntegrityError:
             self.db_session.rollback()
-            raise 
+            raise
 
     def get_all_books(self) -> list[Book]:
         return list(
-            self.db_session.scalars(
-                select(Book).options(selectinload(Book.tags))
-            ).all()
+            self.db_session.scalars(select(Book).options(selectinload(Book.tags))).all()
         )
 
     def _delete_orphan_tags(self) -> None:
-        orphans = self.db_session.scalars(
-            select(Tag).where(~Tag.books.any())
-        ).all()
+        orphans = self.db_session.scalars(select(Tag).where(~Tag.books.any())).all()
         for tag in orphans:
             self.db_session.delete(tag)
 
@@ -74,13 +72,14 @@ class BookRepo:
         except IntegrityError:
             self.db_session.rollback()
             raise
+
     def delete_book(self, book_uid: str) -> None:
         book = self.get_book_by_uid(book_uid)
         if not book:
             raise BookNotFound(f"Book with UID {book_uid} does not exist")
         try:
             self.db_session.delete(book)
-            self.db_session.flush()          
+            self.db_session.flush()
             self._delete_orphan_tags()
             self.db_session.commit()
         except IntegrityError:
@@ -101,10 +100,8 @@ class BookRepo:
         if tag_data is not None:
             book.tags.clear()
             for tag_in in tag_data:
-                tag = (
-                    self.db_session.scalar(
-                        select(Tag).where(Tag.name.ilike(tag_in.name))
-                    )
+                tag = self.db_session.scalar(
+                    select(Tag).where(Tag.name.ilike(tag_in.name))
                 )
                 if not tag:
                     tag = Tag(name=tag_in.name.strip().lower())
@@ -117,7 +114,7 @@ class BookRepo:
             return book
         except IntegrityError:
             self.db_session.rollback()
-            raise 
+            raise
 
     def search(
         self, criteria: BookSearchCriteria, *, limit: int, offset: int
@@ -160,7 +157,5 @@ class BookRepo:
             .offset(offset)
         )
         books = list(self.db_session.execute(stmt).scalars().all())
-        items: list[BookRead] = [
-            BookRead.model_validate(book) for book in books
-        ]
+        items: list[BookRead] = [BookRead.model_validate(book) for book in books]
         return Page[BookRead](items=items, total=total, limit=limit, offset=offset)

@@ -1,218 +1,197 @@
-from collections.abc import Iterator
-from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
+from app.dependencies.auth import RoleChecker
+from app.models.account import Account
+from app.models.role_enum import RoleEnum
+from app.repositories.author_repo import AuthorRepo
 from app.repositories.book_repo import BookRepo
-from app.schemas import BookBase, BookUpload
-from app.schemas.tag_schema import TagCreate
+from app.repositories.genre_repo import GenreRepo
+from app.repositories.level_repo import LevelRepo
+from app.schemas import BookUpload, TagCreate
+from app.schemas.book_schema import BookRead, BookSearchCriteria, BookUpdate, Page
+from app.services.book_errors import BookAlreadyExists, BookNotFound, InvalidBookFile
+from app.services.book_file_storage import BookFileStorage
 from app.services.book_service import BookService
+from app.services.content_validator import ContentValidator
+from app.services.cover_generator import CoverGenerator
+from app.services.epub_metadata_reader import EpubMetadataReader
 
 router = APIRouter(prefix="/books", tags=["books"])
-BOOK_STREAM_CHUNK_SIZE = 1024 * 256  # 256KB
 
 
 def get_book_service(db: Session = Depends(get_db)) -> BookService:
-    book_repo = BookRepo(db)
-    return BookService(book_repo)
+    return BookService(
+        book_repo=BookRepo(db),
+        validator=ContentValidator(),
+        storage=BookFileStorage(),
+        epub_reader=EpubMetadataReader(),
+        cover_generator=CoverGenerator(),
+        author_repo=AuthorRepo(db),
+        level_repo=LevelRepo(db),
+        genre_repo=GenreRepo(db),
+    )
 
 
-def _get_book_file_path(db: Session, book_uid: str) -> Path:
-    book = BookRepo(db).get_book_by_uid(book_uid)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    if book.extension.lower() not in settings.ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Unsupported book format")
-
-    file_path = settings.UPLOAD_DIR / book.file_path
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail=f"File not found at {file_path}")
-
-    return file_path
-
-
-def _iter_file_chunks(
-    file_path: Path, chunk_size: int = BOOK_STREAM_CHUNK_SIZE
-) -> Iterator[bytes]:
-    with file_path.open("rb") as stream:
-        while chunk := stream.read(chunk_size):
-            yield chunk
-
-
-@router.post("/upload", response_model=BookBase)
-async def upload_new_book(
-    title: str | None = Form(None),
-    tags: str = Form(""),
+@router.post("/upload", response_model=BookRead)
+async def upload_book(
     file: UploadFile = File(...),
-    book_service: BookService = Depends(get_book_service),
-):
-    print("router hit")
+    title: str | None = Form(None),
+    author: str | None = Form(None),
+    level: str | None = Form(None),
+    genre: str | None = Form(None),
+    language: str | None = Form(None),
+    tags: str | None = Form(None),
+    svc: BookService = Depends(get_book_service),
+    user: Account = Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher])),
+) -> BookRead:
     try:
-        tag_list = []
-        if tags.strip():
-            tag_list = [
-                TagCreate(name=t.strip()).model_dump()
-                for t in tags.split(",")
-                if t.strip()
-            ]
-        metadata = BookUpload(title=title, tags=tag_list)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid tags format: {e!s}")
+        tag_list = [
+            TagCreate(name=t.strip()) for t in (tags or "").split(",") if t.strip()
+        ]
+        metadata = BookUpload(
+            title=title,
+            author=author,
+            level=level,
+            genre=genre,
+            language=language,
+            tags=tag_list,
+        )
 
-    return await book_service.upload_book(
-        metadata=metadata,
-        file=file,
-    )
+        data = await file.read()
+        book_read = svc.create_from_upload(
+            metadata, file.filename or "", data, file.content_type or ""
+        )
+    except BookNotFound as exc:
+        raise HTTPException(status_code=404, detail="Book not found") from exc
+    except InvalidBookFile as exc:
+        raise HTTPException(status_code=400, detail="Invalid book file") from exc
+    except BookAlreadyExists as exc:
+        raise HTTPException(status_code=409, detail="Book already exists") from exc
+    except (IntegrityError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid book data") from exc
+    return book_read
 
 
-@router.get("/search/", response_model=list[BookBase])
-async def search_books(
-    title: str | None = Query(
-        None, description="Search by book title (case-insensitive, partial match)"
+@router.get("/", response_model=Page[BookRead])
+def list_books(
+    title: str | None = Query(None),
+    author: str | None = Query(None),
+    level: str | None = Query(None),
+    genre: str | None = Query(None),
+    language: str | None = Query(None),
+    tags: str | None = Query(None),
+    extension: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    svc: BookService = Depends(get_book_service),
+    user: Account = Depends(
+        RoleChecker([RoleEnum.admin, RoleEnum.teacher, RoleEnum.student])
     ),
-    tags: str | None = Query(
-        None, description="Comma-separated list of tags to filter by"
-    ),
-    file_type: str | None = Query(
-        None, description="Filter by file type (e.g., epub, pdf)"
-    ),
-    extension: str | None = Query(None, description="Filter by file extension"),
-    book_service: BookService = Depends(get_book_service),
-):
-    """
-    Dynamic search endpoint for books with multiple optional filters.
-    All parameters are optional - if none provided, returns all books.
-    """
-    # Parse tags if provided
-    tag_list = None
-    if tags:
-        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-
-    return book_service.search_books(
-        title=title, tags=tag_list, file_type=file_type, extension=extension
+) -> Page[BookRead]:
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
+    criteria = BookSearchCriteria(
+        title=title,
+        author=author,
+        level=level,
+        genre=genre,
+        language=language,
+        tags=tag_list,
+        extension=extension,
     )
-
-
-@router.get("/{book_uid}/epub")
-def serve_epub(book_uid: str, db: Session = Depends(get_db)):
-    book = BookRepo(db).get_book_by_uid(book_uid)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    file_path = settings.UPLOAD_DIR / book.file_path
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-
-    return FileResponse(
-        path=str(file_path),
-        media_type="application/epub+zip",
-        headers={"Content-Disposition": f'inline; filename="{book.file_path}"'},
-    )
+    return svc.search(criteria, limit=limit, offset=offset)
 
 
 @router.get("/{book_uid}/stream")
-async def stream_book(book_uid: str, db: Session = Depends(get_db)):
-    file_path = _get_book_file_path(db, book_uid)
-    extension = file_path.suffix.lower().lstrip(".")
-
-    media_types = {
-        "pdf": "application/pdf",
-        "epub": "application/epub+zip",
-    }
-    media_type = media_types.get(extension, "application/octet-stream")
-
-    return StreamingResponse(
-        _iter_file_chunks(file_path),
-        media_type=media_type,
+def stream_book(
+    book_uid: str,
+    svc: BookService = Depends(get_book_service),
+    user: Account = Depends(
+        RoleChecker([RoleEnum.admin, RoleEnum.teacher, RoleEnum.student])
+    ),
+) -> Response:
+    try:
+        media_path, media_type = svc.resolve_stream(book_uid)
+    except BookNotFound as exc:
+        raise HTTPException(status_code=404, detail="Book not found") from exc
+    return Response(
+        status_code=204,
         headers={
-            "Content-Disposition": f'inline; filename="{file_path.name}"',
-            "Content-Length": str(file_path.stat().st_size),
+            "X-Accel-Redirect": f"/media/books/{quote(media_path.name)}",
+            "Content-Type": media_type,
+            "Accept-Ranges": "bytes",
         },
     )
 
 
-@router.get("/{book_uid}", response_model=BookBase)
-async def get_book_details(
-    book_uid: str, book_service: BookService = Depends(get_book_service)
-):
-    """Get book details by UID."""
-    book = book_service.get_book_by_uid(book_uid)
+@router.get("/{book_uid}", response_model=BookRead)
+def get_book_details(
+    book_uid: str,
+    svc: BookService = Depends(get_book_service),
+    user: Account = Depends(
+        RoleChecker([RoleEnum.admin, RoleEnum.teacher, RoleEnum.student])
+    ),
+) -> BookRead:
+    book = svc.get_book_by_uid(book_uid)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     return book
 
 
-@router.put("/{book_uid}", response_model=BookBase)
-async def update_book(
+@router.put("/{book_uid}", response_model=BookRead)
+def update_book(
     book_uid: str,
     title: str | None = Form(None),
-    tags: str = Form(""),
-    cover: UploadFile | None = File(None),
-    book_service: BookService = Depends(get_book_service),
-):
-    """Teacher endpoint to update book metadata and optional cover."""
-    # Convert tags_json string back to list for the schema
+    author: str | None = Form(None),
+    level: str | None = Form(None),
+    genre: str | None = Form(None),
+    language: str | None = Form(None),
+    tags: str | None = Form(None),
+    svc: BookService = Depends(get_book_service),
+    user: Account = Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher])),
+) -> BookRead:
     try:
-        tag_list = []
-        if tags.strip():
-            # Create TagCreate objects and convert to dict for BookUpload
-            tag_list = [
-                TagCreate(name=t.strip()).model_dump()
-                for t in tags.split(",")
-                if t.strip()
-            ]
-
-        metadata = BookUpload(title=title, tags=tag_list)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid tags format: {e!s}")
-
-    return await book_service.update_book(book_uid, metadata, cover)
+        tag_list = (
+            [TagCreate(name=t.strip()) for t in tags.split(",") if t.strip()]
+            if tags
+            else None
+        )
+        metadata = BookUpdate(
+            title=title,
+            author=author,
+            level=level,
+            genre=genre,
+            language=language,
+            tags=tag_list,
+        )
+        return svc.update_book(book_uid, metadata)
+    except BookNotFound as exc:
+        raise HTTPException(status_code=404, detail="Book not found") from exc
+    except (IntegrityError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid book data") from exc
 
 
 @router.delete("/{book_uid}", status_code=204)
-async def delete_book(
-    book_uid: str, book_service: BookService = Depends(get_book_service)
-):
-    """Teacher endpoint to delete a book by UID."""
+def delete_book(
+    book_uid: str,
+    svc: BookService = Depends(get_book_service),
+    user: Account = Depends(RoleChecker([RoleEnum.admin, RoleEnum.teacher])),
+) -> Response:
     try:
-        book_service.delete_book(book_uid)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.get("/{book_uid}/read")
-def read_book(book_uid: str, db: Session = Depends(get_db)):
-    book = BookRepo(db).get_book_by_uid(book_uid)
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    if book.extension == "epub":
-        # Look for the converted PDF
-        pdf_name = book.file_path.rsplit(".", 1)[0] + ".pdf"
-        file_path = settings.UPLOAD_DIR / pdf_name
-        if not file_path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail="Converted PDF not found — try re-uploading the EPUB",
-            )
-    else:
-        file_path = settings.UPLOAD_DIR / book.file_path
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found at {file_path}")
-
-    def iterfile():
-        with open(file_path, "rb") as f:
-            while chunk := f.read(1024 * 1024):
-                yield chunk
-
-    return StreamingResponse(
-        iterfile(),
-        media_type="application/pdf",
-        headers={"Content-Disposition": "inline"},
-    )
+        svc.delete_book(book_uid)
+    except BookNotFound as exc:
+        raise HTTPException(status_code=404, detail="Book not found") from exc
+    return Response(status_code=204)

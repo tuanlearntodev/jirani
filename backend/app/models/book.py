@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -32,7 +32,7 @@ class Book(TimestampMixin, Base):
             cover_path: str | None = None,
             file_path: str | None = None,
             extension: str | None = None,
-            metadata_: dict | None = None,
+            metadata_: dict[str, str] | None = None,
         ) -> None: ...
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -53,14 +53,14 @@ class Book(TimestampMixin, Base):
     cover_path: Mapped[str] = mapped_column(String(255), nullable=True)
     file_path: Mapped[str] = mapped_column(String(255), nullable=False)
     extension: Mapped[str] = mapped_column(String(100), nullable=False)
-    metadata_: Mapped[dict] = mapped_column(
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
         JSONB,
         default=dict,
         server_default=text("'{}'::jsonb"),
         nullable=True,
     )
-    
+
     author: Mapped[Author | None] = relationship(back_populates="books")
     level: Mapped[Level | None] = relationship(back_populates="books")
     genre: Mapped[Genre | None] = relationship(back_populates="books")

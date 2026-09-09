@@ -4,7 +4,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
-from app.schemas.tag_schema import TagCreate, TagRead
+from app.schemas.tag_schema import TagCreate
 
 T = TypeVar("T")
 
@@ -14,17 +14,14 @@ class BookBase(BaseModel):
     title: str
     language: str | None = None
     extension: str
-    tags: list[TagRead] = []
     cover_path: str | None = None
     model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
 
 
-
-
 class BookCreate(BookBase):
-    author: str | None = None
-    level: str | None = None
-    genre: str | None = None
+    author_id: int | None = None
+    level_id: int | None = None
+    genre_id: int | None = None
     file_path: str
     cover_path: str | None = None
     tags: list[TagCreate] = []
@@ -37,9 +34,8 @@ class BookRead(BookBase):
     genre: str | None = Field(default=None, alias="genre_name")
     created_at: datetime
     metadata_: dict[str, Any] = Field(default_factory=dict, alias="metadata_")
-    
+
     @computed_field
-    @property
     def cover_url(self) -> str | None:
         if not self.cover_path:
             return None
@@ -61,7 +57,7 @@ class BookUpload(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=255)
     author: str | None = Field(None, max_length=255)
     level: str | None = Field(None, max_length=50)
-    book_type: str | None = Field(None, max_length=50)
+    genre: str | None = Field(None, max_length=50)
     language: str | None = Field(None, max_length=50)
     tags: list[TagCreate] = Field(default_factory=list, max_length=20)
 

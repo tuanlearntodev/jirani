@@ -603,7 +603,7 @@ Notes: the lowercased-name round-trip loss on `downgrade()` is the accepted disp
 
 **Why (learning):** one commit for the whole module plus its migration, for the old plan's fused-rewrite reason — split commits would leave `GET /books/search/` raising `AttributeError` at call time. The migration is in the *same* commit because the code and its schema are one unit: any checkout between the book rewrite and a later migration commit would have dev compose running new code against an old DB (no `genre_id` → `UndefinedColumn` at runtime). The compose entrypoint runs `alembic upgrade head` before uvicorn, so the same-commit migration is what keeps `git pull && cat STATE.md` resumable.
 
-- [ ] **Step 5a-i: Write the failing tests**
+- [x] **Step 5a-i: Write the failing tests**
 
 **`test_book_search.py`** — repo-level probes, red against legacy `BookRepo` (`search` doesn't exist → `AttributeError`):
 1. `test_search_genre_filter_and_entities` — seed `Author(name="Ada")`, `Genre(name="scifi")`, two books linked via `book.genre = g`; `search(BookSearchCriteria(genre="SCIFI"), limit=10, offset=0)` → only the scifi book, `total == 1`; the response's `genre == "scifi"`
@@ -622,17 +622,17 @@ Notes: the lowercased-name round-trip loss on `downgrade()` is the accepted disp
 
 **`test_book_upload.py`** — old plan 5a-i list verbatim (real PDF happy path, bad-magic 400 with nothing on disk, auth required), plus: upload with form `genre="Sci-Fi"` → 200 and (`genre_id` linked): `db.expire_all()`, book row's `genre.name == "sci-fi"`; upload with `author="Ada Lovelace"` → `authors` row stored `"ada lovelace"`.
 
-- [ ] **Step 5a-ii: Verify they fail** — `cd backend && uv run pytest app/tests/media/test_book_search.py app/tests/media/test_book_stream.py app/tests/media/test_book_upload.py -v`. Expected red: `AttributeError: 'BookRepo' object has no attribute 'search'`; stream tests 404-route-missing or 200-stream (either is fine — the point is red); upload probes fail (no genre resolution). Everything else (pins, auth, leaves) green.
+- [x] **Step 5a-ii: Verify they fail** — `cd backend && uv run pytest app/tests/media/test_book_search.py app/tests/media/test_book_stream.py app/tests/media/test_book_upload.py -v`. Expected red: `AttributeError: 'BookRepo' object has no attribute 'search'`; stream tests 404-route-missing or 200-stream (either is fine — the point is red); upload probes fail (no genre resolution). Everything else (pins, auth, leaves) green.
 
-- [ ] **Step 5b: Model + schemas** per Interfaces. Gate: `cd backend && uv run mypy app/models/book.py app/schemas/book_schema.py --strict` → 0. Run `uv run pytest -v` — expect ONLY the three probe files red; all other files green. The model change reads `author_id` before the migration exists → the testcontainers harness `create_all`s the column so tests stay green; dev compose is safe because the migration lands in this same commit.
+- [x] **Step 5b: Model + schemas** per Interfaces. Gate: `cd backend && uv run mypy app/models/book.py app/schemas/book_schema.py --strict` → 0. Run `uv run pytest -v` — expect ONLY the three probe files red; all other files green. The model change reads `author_id` before the migration exists → the testcontainers harness `create_all`s the column so tests stay green; dev compose is safe because the migration lands in this same commit.
 
-- [ ] **Step 5c: Repo** per Interfaces. Gate: `cd backend && uv run mypy app/repositories/book_repo.py --strict && uv run pytest app/tests/media/test_book_search.py -v` → 0 mypy + search probes green.
+- [x] **Step 5c: Repo** per Interfaces. Gate: `cd backend && uv run mypy app/repositories/book_repo.py --strict && uv run pytest app/tests/media/test_book_search.py -v` → 0 mypy + search probes green.
 
-- [ ] **Step 5d: Service** per Interfaces. Gate: `cd backend && uv run mypy app/services/book_service.py --strict` + `grep -n "HTTPException\|fitz\|open(" app/services/book_service.py` prints nothing.
+- [x] **Step 5d: Service** per Interfaces. Gate: `cd backend && uv run mypy app/services/book_service.py --strict` + `grep -n "HTTPException\|fitz\|open(" app/services/book_service.py` prints nothing.
 
-- [ ] **Step 5e: Router** per Interfaces. Gate: `cd backend && uv run pytest -v` → all green.
+- [x] **Step 5e: Router** per Interfaces. Gate: `cd backend && uv run pytest -v` → all green.
 
-- [ ] **Step 5f: Write the migration** (full code above) and verify it:
+- [x] **Step 5f: Write the migration** (full code above) and verify it:
   1. Generate a fresh hash: `cd backend && uv run alembic revision --rev-id "$(uuidgen | cut -c1-12)" -m "authors levels genres entities"` then paste the body (or `--autogenerate` against an empty DB and *replace* the body — the backfill is hand-written either way)
   2. **Upgrade/downgrade round-trip on an empty DB:**
 
@@ -665,7 +665,7 @@ SELECT (SELECT count(*) FROM books) AS books,
   Expected: `with_author` equals the number of books that had a non-empty `author` string pre-migration (compare against `jirani_library` counts before the upgrade run); `genres` matches non-junk `book_type` values. Mismatch → STOP, fix the SQL before anything else.
   4. Then apply to the dev DB itself: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/jirani_library uv run alembic upgrade head`
 
-- [ ] **Step 5g: Full suite + lint + type**
+- [x] **Step 5g: Full suite + lint + type**
 
 ```bash
 cd backend && uv run ruff format app/models/book.py app/schemas/book_schema.py app/repositories/book_repo.py app/services/book_service.py app/api/book_router.py app/tests/media/test_book_search.py app/tests/media/test_book_stream.py app/tests/media/test_book_upload.py && uv run ruff check app/models/book.py app/schemas/book_schema.py app/repositories/book_repo.py app/services/book_service.py app/api/book_router.py app/tests/media/test_book_search.py app/tests/media/test_book_stream.py app/tests/media/test_book_upload.py --ignore B008 && uv run mypy app/models/book.py app/schemas/book_schema.py app/repositories/book_repo.py app/services/book_service.py app/api/book_router.py --strict && uv run pytest -v
@@ -673,12 +673,14 @@ cd backend && uv run ruff format app/models/book.py app/schemas/book_schema.py a
 
 Expected: 0/0 on all six; full suite green (auth + pins + leaves + entities + the three book probe files).
 
-- [ ] **Step 5h: `/done` then commit** — dispatch the `invariant-auditor` on the diff (this task exceeds the ~50-line review threshold; the migration SQL especially). On PASS:
+- [x] **Step 5h: `/done` then commit** — dispatch the `invariant-auditor` on the diff (this task exceeds the ~50-line review threshold; the migration SQL especially). On PASS:
 
 ```bash
 git add backend/app/models/book.py backend/app/models/author.py backend/app/models/level.py backend/app/models/genre.py backend/app/schemas/book_schema.py backend/app/repositories/book_repo.py backend/app/services/book_service.py backend/app/api/book_router.py backend/migrations backend/app/tests/media/test_book_search.py backend/app/tests/media/test_book_stream.py backend/app/tests/media/test_book_upload.py
 git commit -m "refactor: book model on author/level/genre FKs, X-Accel stream, thin service; migration with data backfill"
 ```
+
+> **Deviation record (2026-09-09, 5h gate):** `test_book_upload.py::test_upload_overlong_title_400` (added after the except-clause implementation) is declared a **characterization pin over legacy code**: at HEAD a9397f5 the legacy upload router's blanket `except Exception` already mapped `BookUpload` validation failures (title > 255) to 400, so the probe pins existing behavior — witnessed green first, red structurally impossible. The two `GET /books/` list-endpoint probes are accepted under the documented-red convention (the legacy tree had neither the route's auth nor `Page[BookRead]`, so red was structurally guaranteed; no red run witnessed). Audit drifts, non-blocking: `alias=` used where plan:437 says `validation_alias=` (equivalent under `from_attributes`); `BookSearchCriteria.title` vs plan's `q` (self-consistent); `pyproject.toml` mypy-plugin line rides this commit though absent from the Task-5 file list.
 
 ---
 
