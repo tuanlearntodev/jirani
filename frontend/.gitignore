@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment files — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Test and coverage output
+coverage
+coverage/
+
+# Generated dependency lockfile stays out of the repo (learner-team policy;
+# reinstating CI for the frontend later is the trigger to track it again)
+package-lock.json
+npm-shrinkwrap.json
+bun.lock
+bun.lockb
